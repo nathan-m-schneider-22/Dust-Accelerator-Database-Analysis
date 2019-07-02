@@ -43,28 +43,9 @@ class Rate_analyzer:
         self.experiment_segment()
         self.tag_sessions()
 
-        self.session_list.sort( key = lambda x: x.duration)
-        for s in self.session_list:
-            if len(s.p_list)==1:
-                print(s)
-        print(sum(s.duration for s in self.session_list if len(s.p_list)==1))
-
-
-        
-        print(sum( s.duration for s in self.session_list))
-        print(sum ( len(s.p_list) for s in self.session_list))
-        print(len(self.particles))
-
-        print(sum( s.duration for s in self.session_list if s.dustID == None))
-        print(sum(1 for s in self.session_list if s.dustID == None))
-        print(len(self.session_list))
-        """for i in range(1,len(self.session_list)-1):
-            if self.session_list[i].dustID==None:
-                print(self.session_list[i-1])
-                print(self.session_list[i])
-                print(self.session_list[i+1])
-                print("======================================")"""
-        
+        self.session_list.sort( key = lambda x: -1*len(x.p_list))
+        for s in self.session_list: 
+            print(s)
     def tag_sessions(self):
 
         self.empty_sessions = []
@@ -152,7 +133,8 @@ class Rate_analyzer:
 
     def pull_data(self,hostname, usr, password, db):
     
-        mydb = mysql.connector.connect(host=hostname, user=usr,passwd=password,database=db)
+        mydb = mysql.connector.connect(host=hostname, user=usr,\
+            passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
         limited = False
         if limited:
