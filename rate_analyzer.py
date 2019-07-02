@@ -34,8 +34,6 @@ class Rate_analyzer:
         print(time.time() - start_time)
 
 
-        #self.particles = [(100,0),(200,0),(500,0),(600,0),(700,0),(800,0),(1100,0),(1150,0),(1500,0)]
-        #self.velocities = [(300,10,5),(650,100,0),(1600,5,4)]
 
         self.generate_stops()
         print("Data retrieved")
@@ -45,7 +43,13 @@ class Rate_analyzer:
         self.experiment_segment()
         self.tag_sessions()
 
-        #for s in self.session_list: print(s)
+        self.session_list.sort( key = lambda x: x.duration)
+        for s in self.session_list:
+            if len(s.p_list)==1:
+                print(s)
+        print(sum(s.duration for s in self.session_list if len(s.p_list)==1))
+
+
         
         print(sum( s.duration for s in self.session_list))
         print(sum ( len(s.p_list) for s in self.session_list))
@@ -54,12 +58,13 @@ class Rate_analyzer:
         print(sum( s.duration for s in self.session_list if s.dustID == None))
         print(sum(1 for s in self.session_list if s.dustID == None))
         print(len(self.session_list))
-        for i in range(1,len(self.session_list)-1):
+        """for i in range(1,len(self.session_list)-1):
             if self.session_list[i].dustID==None:
                 print(self.session_list[i-1])
                 print(self.session_list[i])
                 print(self.session_list[i+1])
-                print("======================================")
+                print("======================================")"""
+        
     def tag_sessions(self):
 
         self.empty_sessions = []
@@ -70,6 +75,7 @@ class Rate_analyzer:
                 p_index+=1
             if self.particles[p_index][0] <= session.end:
                 session.dustID = self.particles[p_index][1]
+                session.material = self.dust_type[self.particles[p_index][1]]
                 self.valid_sessions.append(session)
                 
             else: self.empty_sessions.append(session)
@@ -172,6 +178,15 @@ class Rate_analyzer:
             where integer_timestamp > 1560973836029 order by integer_timestamp ASC")
             self.experiments = cursor.fetchall()
 
+            
+            cursor.execute("SELECT id_dust_type,dust_name \
+            FROM ccldas_production.dust_type")
+            dust_list = cursor.fetchall()
+            self.dust_type ={}
+            for d in dust_list:
+                self.dust_type[d[0]] = d[1]
+            print(self.dust_type)
+
             query = "SELECT integer_timestamp, id_dust_info, velocity\
             , estimate_quality FROM ccldas_production.dust_event \
             WHERE integer_timestamp > 1560973836029 AND (velocity <= 100000 \
@@ -199,7 +214,13 @@ class Rate_analyzer:
             cursor.execute("SELECT integer_timestamp,id_experiment_settings\
             FROM ccldas_production.experiment_settings")
             self.experiments = cursor.fetchall()
-            
+
+            cursor.execute("SELECT id_dust_type,dust_name \
+            FROM ccldas_production.dust_type")
+            dust_list = cursor.fetchall()
+            self.dust_type ={}
+            for d in dust_list:
+                self.dust_type[d[0]] = d[1]
 
             query = "SELECT integer_timestamp, id_dust_info,velocity\
             FROM ccldas_production.dust_event WHERE (velocity <= 100000 \
