@@ -39,62 +39,71 @@ class Rate_analyzer:
 
         self.generate_stops()
         print("Data retrieved")
-    
-
-
         
-        #self.get_sessions()
-        self.segment_sessions()
 
+        self.velocity_segment()
+        self.experiment_segment()
         self.tag_sessions()
 
+        #for s in self.session_list: print(s)
+        
         print(sum( s.duration for s in self.session_list))
         print(sum ( len(s.p_list) for s in self.session_list))
         print(len(self.particles))
-        
 
-        #for s in self.session_list:print(s)
-
-    def display_gaps(self):
+        print(sum( s.duration for s in self.session_list if s.dustID == None))
+        print(sum(1 for s in self.session_list if s.dustID == None))
+        print(len(self.session_list))
         for i in range(1,len(self.session_list)-1):
-            if self.session_list[i].experimentID == None and self.session_list[i].duration > 60*60*1000:
+            if self.session_list[i].dustID==None:
                 print(self.session_list[i-1])
                 print(self.session_list[i])
                 print(self.session_list[i+1])
-                print("-----------------------------------------")
-
-        
+                print("======================================")
     def tag_sessions(self):
 
         self.empty_sessions = []
         self.valid_sessions = []
         p_index =0
-        counter = 0
-        total = 0
         for session in self.session_list:
             while self.particles[p_index][0] < session.start:
                 p_index+=1
-                counter +=1
-                total +=1
             if self.particles[p_index][0] <= session.end:
-                #session.dustID = self.particles[p_index][3]
-                #session.experimentID = self.particles[p_index][2]
+                session.dustID = self.particles[p_index][1]
                 self.valid_sessions.append(session)
                 
             else: self.empty_sessions.append(session)
-
+            
             while self.particles[p_index][0] <= session.end:
                 session.p_list.append(self.particles[p_index])
                 p_index+=1
-        counter =0
-        print("Count: ",total)
+        
+    def experiment_segment(self):
+        s_index = 0
+        e_index = 0
+        while s_index < len(self.session_list) and e_index < len(self.experiments):
+            session = self.session_list[s_index]
+            while e_index < len(self.experiments)-1 and \
+                self.experiments[e_index][0] < session.start:
+                e_index += 1
 
-    def segment_sessions(self):
+            session.experimentID = self.experiments[e_index][1]
+            
+            if self.experiments[e_index][0] < session.end:
+                del self.session_list[s_index]
+                self.session_list.insert(s_index, Session(self.experiments[e_index][0]+1,\
+                                    session.end,session.min_V,session.max_V))
+                self.session_list.insert(s_index, Session(session.start,\
+                                    self.experiments[e_index][0]-1,session.min_V,session.max_V))
+                
+                e_index+=1
+                s_index -=1
+                
+            s_index+=1
+            
+    def velocity_segment(self):
         s_index = 0
         v_index = 0
-        for s in self.session_list:print(s)
-        print ("===============================")
-        print("Len: ",len(self.session_list))
         while s_index < len(self.session_list) and v_index < len(self.velocities):
             session = self.session_list[s_index]
             while v_index < len(self.velocities)-1 and \
@@ -113,7 +122,6 @@ class Rate_analyzer:
                 s_index -=1
                 
             s_index+=1
-        print("=========================================")
                 
     def generate_stops(self):
         self.session_list = []
@@ -225,16 +233,11 @@ class Rate_analyzer:
             stops = cursor.fetchall()
             self.stops = [time[0] for time in stops]
             print(".",end = "")
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.experiment_settings\
+            cursor.execute("SELECT integer_timestamp, id_experiment_settings FROM ccldas_production.experiment_settings\
             where integer_timestamp > 1560973836029 order by integer_timestamp ASC")
-            experiments = cursor.fetchall()
-            for ex in experiments:
-                self.starts.append(ex[0]+1)
-                self.stops.append(ex[0])
-            self.starts.sort()
-            self.stops.sort()
+            self.experiments = cursor.fetchall()
 
-            query = "SELECT integer_timestamp, velocity, id_experiment_settings, id_dust_info\
+            query = "SELECT integer_timestamp, id_dust_info, velocity\
             , estimate_quality FROM ccldas_production.dust_event \
             WHERE integer_timestamp > 1560973836029 AND (velocity <= 100000 \
             AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
@@ -258,17 +261,12 @@ class Rate_analyzer:
             stops = cursor.fetchall()
             self.stops = [time[0] for time in stops]
             print(".",end = "")
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.experiment_settings")
-            experiments = cursor.fetchall()
+            cursor.execute("SELECT integer_timestamp,id_experiment_settings\
+            FROM ccldas_production.experiment_settings")
+            self.experiments = cursor.fetchall()
             
-            """
-            for ex in experiments:
-                self.starts.append(ex[0]+1)
-                self.stops.append(ex[0])
-            self.starts.sort()
-            self.stops.sort()"""
 
-            query = "SELECT integer_timestamp\
+            query = "SELECT integer_timestamp, id_dust_info,velocity\
             FROM ccldas_production.dust_event WHERE (velocity <= 100000 \
             AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
             cursor.execute(query)
