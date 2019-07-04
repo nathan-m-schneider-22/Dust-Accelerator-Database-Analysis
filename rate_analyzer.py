@@ -2,6 +2,8 @@ import mysql.connector
 from datetime import datetime
 
 gap_size = 20*60*1000
+accelerator_range = 100
+bin_size = .1
 
 
 import time
@@ -15,7 +17,6 @@ class Session:
         self.experimentID = None
         self.min_V = minV
         self.max_V = maxV
-        self.num_particles = 0
         self.p_list = []
 
     def __str__(self):
@@ -33,19 +34,60 @@ class Rate_analyzer:
         self.pull_data(hostname,user, password, database)
         print(time.time() - start_time)
 
-
-
-        self.generate_stops()
         print("Data retrieved")
+        self.generate_stops()
         
+        print("Done stops")
 
         self.velocity_segment()
         self.experiment_segment()
         self.tag_sessions()
 
-        self.session_list.sort( key = lambda x: -1*len(x.p_list))
-        for s in self.session_list: 
-            print(s)
+        # self.session_list = []
+        # s = Session(1,5,0,20)
+        # s.p_list.append((2,0,7000))
+        # s.p_list.append((3,0,8000))
+        # self.session_list.append(s)
+
+        # s = Session(7,10,35,60)
+        # s.p_list.append((8,0,37000))
+        # s.p_list.append((9,0,39000))
+        # self.session_list.append(s)
+
+
+        print("Done segments")
+        print("Done tags")
+
+
+        global bin_size
+        self.make_bins()
+    def make_bins(self, material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
+        
+        self.v_bins = [-1]*int(accelerator_range/bin_size)
+        self.p_bins = [0]*int(accelerator_range/bin_size)
+        self.rates = [0]*int(accelerator_range/bin_size)
+        for session in self.session_list:
+            if session.start > start and session.end < end:
+                if (dustID ==-1 or session.dustID == dustID) and  (material == None or session.material == material):
+                    for i in range(int(accelerator_range/bin_size)):
+                        if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size:
+                            self.v_bins[i] += session.duration
+                            
+        for session in self.session_list:
+            for particle in session.p_list:
+                velocity = particle[2]/1000
+                if velocity > v_min and velocity < v_max: self.p_bins[ int(velocity/bin_size)]+=1
+        print("For Material: %s, Time %s-%s DustID: %d Velocity %.2f-%.2f" %\
+            (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
+                datetime.fromtimestamp(end/1000).strftime("%c"),dustID, v_min,v_max))
+        for i in range(int(accelerator_range/bin_size)):
+            self.rates[i] = self.p_bins[i]/(self.v_bins[i]/1000/60/60)
+            print("%6.2f - %6.2fdkm/s total %8f hours %8d particles %8.3f  particles per hour" % \
+               (i*bin_size, (i+1)*bin_size,self.v_bins[i]/1000/60/60,\
+                   self.p_bins[i],self.rates[i]))
+        print("Total rate for range is %f particles per hour" % \
+            ( sum (rate for rate in self.rates)))
+        print( sum (t for t in self.v_bins)*bin_size)
     def tag_sessions(self):
 
         self.empty_sessions = []
@@ -62,7 +104,8 @@ class Rate_analyzer:
             else: self.empty_sessions.append(session)
             
             while self.particles[p_index][0] <= session.end:
-                session.p_list.append(self.particles[p_index])
+                if self.particles[p_index][3] >= 3: 
+                    session.p_list.append(self.particles[p_index])
                 p_index+=1
         
     def experiment_segment(self):
@@ -74,7 +117,7 @@ class Rate_analyzer:
                 self.experiments[e_index][0] < session.start:
                 e_index += 1
 
-            session.experimentID = self.experiments[e_index][1]
+            session.experimentID = self.experiments[e_index-1][1]
             
             if self.experiments[e_index][0] < session.end:
                 del self.session_list[s_index]
@@ -82,7 +125,6 @@ class Rate_analyzer:
                                     session.end,session.min_V,session.max_V))
                 self.session_list.insert(s_index, Session(session.start,\
                                     self.experiments[e_index][0]-1,session.min_V,session.max_V))
-                
                 e_index+=1
                 s_index -=1
                 
@@ -96,20 +138,21 @@ class Rate_analyzer:
             while v_index < len(self.velocities)-1 and \
                   self.velocities[v_index][0] < session.start:
                 v_index += 1
-            session.min_V = self.velocities[v_index][2]
-            session.max_V = self.velocities[v_index][1]
+            session.min_V = self.velocities[v_index-1][2]
+            session.max_V = self.velocities[v_index-1][1]
+          
             if self.velocities[v_index][0] < session.end:
                 del self.session_list[s_index]
                 self.session_list.insert(s_index, Session(self.velocities[v_index][0]+1,\
                                     session.end,session.min_V,session.max_V))
                 self.session_list.insert(s_index, Session(session.start,\
                                     self.velocities[v_index][0]-1,session.min_V,session.max_V))
-                
-                v_index+=1
+
                 s_index -=1
+                v_index -=1
                 
             s_index+=1
-                
+
     def generate_stops(self):
         self.session_list = []
 
@@ -167,9 +210,8 @@ class Rate_analyzer:
             self.dust_type ={}
             for d in dust_list:
                 self.dust_type[d[0]] = d[1]
-            print(self.dust_type)
 
-            query = "SELECT integer_timestamp, id_dust_info, velocity\
+            query = "SELECT integer_timestamp, id_dust_info, velocity,estimate_quality\
             , estimate_quality FROM ccldas_production.dust_event \
             WHERE integer_timestamp > 1560973836029 AND (velocity <= 100000 \
             AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
@@ -204,8 +246,8 @@ class Rate_analyzer:
             for d in dust_list:
                 self.dust_type[d[0]] = d[1]
 
-            query = "SELECT integer_timestamp, id_dust_info,velocity\
-            FROM ccldas_production.dust_event WHERE (velocity <= 100000 \
+            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+            FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
             AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
             cursor.execute(query)
             self.particles = cursor.fetchall()
