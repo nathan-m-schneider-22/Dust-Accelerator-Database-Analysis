@@ -1,9 +1,12 @@
 import mysql.connector
 from datetime import datetime
+import tkinter
+
 
 gap_size = 20*60*1000
 accelerator_range = 100
-bin_size = .1
+bin_size = 1
+ 
 
 
 import time
@@ -11,7 +14,7 @@ class Session:
     def __init__(self, start, end,minV,maxV):
         self.start = start
         self.end = end
-        self.duration = end-start
+        self.duration = end-start   
         self.material = None
         self.dustID = None
         self.experimentID = None
@@ -33,7 +36,7 @@ class Rate_analyzer:
         start_time = time.time()
         self.pull_data(hostname,user, password, database)
         print(time.time() - start_time)
-
+        start_time = time.time()
         print("Data retrieved")
         self.generate_stops()
         
@@ -57,37 +60,47 @@ class Rate_analyzer:
 
         print("Done segments")
         print("Done tags")
-
-
-        global bin_size
         self.make_bins()
+        print(time.time()-start_time)
+
     def make_bins(self, material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
-        
-        self.v_bins = [-1]*int(accelerator_range/bin_size)
+        self.v_bins = [0]*int(accelerator_range/bin_size)
         self.p_bins = [0]*int(accelerator_range/bin_size)
         self.rates = [0]*int(accelerator_range/bin_size)
-        for session in self.session_list:
+        for session in self.session_list:   
             if session.start > start and session.end < end:
                 if (dustID ==-1 or session.dustID == dustID) and  (material == None or session.material == material):
                     for i in range(int(accelerator_range/bin_size)):
                         if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size:
                             self.v_bins[i] += session.duration
-                            
-        for session in self.session_list:
-            for particle in session.p_list:
-                velocity = particle[2]/1000
-                if velocity > v_min and velocity < v_max: self.p_bins[ int(velocity/bin_size)]+=1
+                    for particle in session.p_list:
+                        velocity = particle[2]/1000
+                        if velocity >= v_min and velocity < v_max: self.p_bins[ int(velocity/bin_size)]+=1
+
         print("For Material: %s, Time %s-%s DustID: %d Velocity %.2f-%.2f" %\
             (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
                 datetime.fromtimestamp(end/1000).strftime("%c"),dustID, v_min,v_max))
+
+                
         for i in range(int(accelerator_range/bin_size)):
-            self.rates[i] = self.p_bins[i]/(self.v_bins[i]/1000/60/60)
-            print("%6.2f - %6.2fdkm/s total %8f hours %8d particles %8.3f  particles per hour" % \
-               (i*bin_size, (i+1)*bin_size,self.v_bins[i]/1000/60/60,\
-                   self.p_bins[i],self.rates[i]))
+            if self.v_bins[i] !=0: self.rates[i] = self.p_bins[i]/(self.v_bins[i]/1000/60/60)
+            else: self.rates[i] = 0
+            # print("%6.2f - %6.2fdkm/s total %8.3f hours %8d particles %8.3f  particles per hour" % \
+            #    (i*bin_size, (i+1)*bin_size,self.v_bins[i]/1000/60/60,\
+            #        self.p_bins[i],self.rates[i]))
+
+        #print("Total of %d particles" %(sum(p for p in self.p_bins)))
+
+        # c = 0
+        # for s in self.session_list:
+        #     for p in s.p_list:
+        #         if (dustID ==-1 or s.dustID == dustID) and p[2]/1000 > v_min and p[2]/1000 < v_max: c+=1
+        # print(c)
+
+
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
-        print( sum (t for t in self.v_bins)*bin_size)
+
     def tag_sessions(self):
 
         self.empty_sessions = []
@@ -125,7 +138,7 @@ class Rate_analyzer:
                                     session.end,session.min_V,session.max_V))
                 self.session_list.insert(s_index, Session(session.start,\
                                     self.experiments[e_index][0]-1,session.min_V,session.max_V))
-                e_index+=1
+                e_index-=1
                 s_index -=1
                 
             s_index+=1
@@ -253,3 +266,4 @@ class Rate_analyzer:
             self.particles = cursor.fetchall()
 
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
+

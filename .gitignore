@@ -7,3 +7,6 @@ Dump*
 IDL*
 
 *.csv
+*.png
+*.png
+matplotlib/
