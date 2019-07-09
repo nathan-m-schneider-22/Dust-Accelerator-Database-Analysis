@@ -51,8 +51,7 @@ class Rate_analyzer:
 
         print("Done segments")
         print("Done tags")
-        self.make_bins()
-
+        self.make_bins(material="Iron")
 
     def make_bins(self, session_quality = 4,material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
         self.v_bins = [0]*int(accelerator_range/bin_size)
@@ -86,6 +85,40 @@ class Rate_analyzer:
 
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
+
+        plt.subplot(231)
+        self.v_bins = [ s/1000/60/60 for s in self.v_bins]
+        plt.plot(self.v_bins)
+        plt.title("Run time totals")
+        plt.subplot(232)
+        p_ar = [p[2]/1000 for p in self.particles]
+        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        plt.title("Particle distribution")
+
+        plt.subplot(233)
+        plt.plot(self.rates)
+
+        plt.title("Rates of detection")
+        plt.subplot(234)
+
+        qualities = [s.quality for s in self.session_list]
+        plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
+        plt.title("Session qualities")
+
+        plt.subplot(235)
+
+        p_ar = [p[2]/1000 for p in self.particles]
+        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        plt.title("Particle distribution (log scale)")
+        plt.yscale("log")
+
+        plt.subplot(236)
+        plt.plot(self.rates)
+
+        plt.title("Rates of detection (log scale)")
+        plt.yscale("log")
+
+        plt.show()
 
     def tag_sessions(self):
 
