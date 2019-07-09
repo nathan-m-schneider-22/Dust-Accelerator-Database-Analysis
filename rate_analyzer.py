@@ -5,13 +5,14 @@ import tkinter
 
 gap_size = 20*60*1000
 accelerator_range = 100
-bin_size = 1
+bin_size = .1
  
 
 
 import time
 class Session:
     def __init__(self, start, end,minV,maxV):
+        
         self.start = start
         self.end = end
         self.duration = end-start   
@@ -21,6 +22,7 @@ class Session:
         self.min_V = minV
         self.max_V = maxV
         self.p_list = []
+        self.quality = -99
 
     def __str__(self):
         return "Session from %s to %s \nDuration: %.1f min material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
@@ -41,27 +43,17 @@ class Rate_analyzer:
         self.generate_stops()
         
         print("Done stops")
-
+    
         self.velocity_segment()
         self.experiment_segment()
         self.tag_sessions()
-
-        # self.session_list = []
-        # s = Session(1,5,0,20)
-        # s.p_list.append((2,0,7000))
-        # s.p_list.append((3,0,8000))
-        # self.session_list.append(s)
-
-        # s = Session(7,10,35,60)
-        # s.p_list.append((8,0,37000))
-        # s.p_list.append((9,0,39000))
-        # self.session_list.append(s)
-
 
         print("Done segments")
         print("Done tags")
         self.make_bins()
         print(time.time()-start_time)
+
+
 
     def make_bins(self, material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
         self.v_bins = [0]*int(accelerator_range/bin_size)
@@ -91,13 +83,25 @@ class Rate_analyzer:
 
         #print("Total of %d particles" %(sum(p for p in self.p_bins)))
 
-        # c = 0
-        # for s in self.session_list:
-        #     for p in s.p_list:
-        #         if (dustID ==-1 or s.dustID == dustID) and p[2]/1000 > v_min and p[2]/1000 < v_max: c+=1
-        # print(c)
+        ar = [0]*10
+        su = 0
+        for s in self.session_list:
+            if len(s.p_list) ==0: 
+                ar[0] +=1
+                su += s.duration
 
+            if len(s.p_list) ==1:
+                su += s.duration
+                ar[1] +=1
+            if len(s.p_list) ==2: 
+                ar[2] +=1
+                su += s.duration
 
+            if len(s.p_list )==3: ar[3] +=1
+            if len(s.p_list) ==4: ar[4] +=1
+            if 5<=len(s.p_list)<=10: ar[5] +=1
+        print(ar)
+        print(su)
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
 
@@ -111,7 +115,7 @@ class Rate_analyzer:
                 p_index+=1
             if self.particles[p_index][0] <= session.end:
                 session.dustID = self.particles[p_index][1]
-                session.material = self.dust_type[self.particles[p_index][1]]
+                session.material = self.type_to_name[self.info_to_type[self.particles[p_index][1]]]
                 self.valid_sessions.append(session)
                 
             else: self.empty_sessions.append(session)
@@ -120,6 +124,7 @@ class Rate_analyzer:
                 if self.particles[p_index][3] >= 3: 
                     session.p_list.append(self.particles[p_index])
                 p_index+=1
+
         
     def experiment_segment(self):
         s_index = 0
@@ -192,78 +197,49 @@ class Rate_analyzer:
         mydb = mysql.connector.connect(host=hostname, user=usr,\
             passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
-        limited = False
-        if limited:
-            print(".",end = "")
-            cursor.execute("select integer_timestamp, velocity_max, \
-            velocity_min from psu where integer_timestamp > 1560973836029  order by integer_timestamp ASC")
-            self.velocities = cursor.fetchall()
-            print(".",end = "")
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-            WHERE integer_timestamp > 1560973836029 AND !(frequency=0 OR needle_voltage=0 \
-            OR amplitude=0) order by integer_timestamp ASC")
-            starts = cursor.fetchall()
-            self.starts = [ time[0] for time in starts]
-            print(".",end = "")
+        
+        print(".",end = "")
+        cursor.execute("select integer_timestamp, velocity_max, \
+        velocity_min from psu order by integer_timestamp ASC")
+        self.velocities = cursor.fetchall()
+        print(".",end = "")
+        cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
+        WHERE !(frequency=0 OR needle_voltage=0 OR amplitude=0)")
+        starts = cursor.fetchall()
+        self.starts = [ time[0] for time in starts]
+        print(".",end = "")
 
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-            WHERE integer_timestamp > 1560973836029 AND (frequency=0 OR \
-            needle_voltage=0  OR amplitude=0) order by integer_timestamp ASC")
-            stops = cursor.fetchall()
-            self.stops = [time[0] for time in stops]
-            print(".",end = "")
-            cursor.execute("SELECT integer_timestamp, id_experiment_settings FROM ccldas_production.experiment_settings\
-            where integer_timestamp > 1560973836029 order by integer_timestamp ASC")
-            self.experiments = cursor.fetchall()
+        cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
+        WHERE (frequency=0 OR needle_voltage=0  OR amplitude=0)")
+        stops = cursor.fetchall()
+        self.stops = [time[0] for time in stops]
+        print(".",end = "")
+        cursor.execute("SELECT integer_timestamp,id_experiment_settings\
+        FROM ccldas_production.experiment_settings")
+        self.experiments = cursor.fetchall()
 
-            
-            cursor.execute("SELECT id_dust_type,dust_name \
-            FROM ccldas_production.dust_type")
-            dust_list = cursor.fetchall()
-            self.dust_type ={}
-            for d in dust_list:
-                self.dust_type[d[0]] = d[1]
+        cursor.execute("SELECT id_dust_type,dust_name \
+        FROM ccldas_production.dust_type")
+        dust_type = cursor.fetchall()
 
-            query = "SELECT integer_timestamp, id_dust_info, velocity,estimate_quality\
-            , estimate_quality FROM ccldas_production.dust_event \
-            WHERE integer_timestamp > 1560973836029 AND (velocity <= 100000 \
-            AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
-            cursor.execute(query)
-            self.particles = cursor.fetchall()
-        else:
-            
-            print(".",end = "")
-            cursor.execute("select integer_timestamp, velocity_max, \
-            velocity_min from psu order by integer_timestamp ASC")
-            self.velocities = cursor.fetchall()
-            print(".",end = "")
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-            WHERE !(frequency=0 OR needle_voltage=0 OR amplitude=0)")
-            starts = cursor.fetchall()
-            self.starts = [ time[0] for time in starts]
-            print(".",end = "")
+        cursor.execute("SELECT id_dust_info,dust_type \
+        FROM ccldas_production.dust_info")
+        dust_info = cursor.fetchall()
 
-            cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-            WHERE (frequency=0 OR needle_voltage=0  OR amplitude=0)")
-            stops = cursor.fetchall()
-            self.stops = [time[0] for time in stops]
-            print(".",end = "")
-            cursor.execute("SELECT integer_timestamp,id_experiment_settings\
-            FROM ccldas_production.experiment_settings")
-            self.experiments = cursor.fetchall()
+        self.info_to_type = {}
+        for d in dust_info:
+            self.info_to_type[d[0]] = d[1]
+        self.type_to_name = {}
+        for d in dust_type:
+            self.type_to_name[d[0]] = d[1]   
 
-            cursor.execute("SELECT id_dust_type,dust_name \
-            FROM ccldas_production.dust_type")
-            dust_list = cursor.fetchall()
-            self.dust_type ={}
-            for d in dust_list:
-                self.dust_type[d[0]] = d[1]
 
-            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-            FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
-            AND velocity >= 0 ) ORDER BY integer_timestamp ASC"
-            cursor.execute(query)
-            self.particles = cursor.fetchall()
+        query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+        FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
+        AND velocity >= 0) ORDER BY integer_timestamp ASC"
+        cursor.execute(query)
+        self.particles = cursor.fetchall()
 
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
+#a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 

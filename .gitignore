@@ -10,3 +10,4 @@ IDL*
 *.png
 *.png
 matplotlib/
+.vscode/
