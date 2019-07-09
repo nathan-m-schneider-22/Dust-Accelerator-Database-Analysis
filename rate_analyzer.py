@@ -1,6 +1,7 @@
 import mysql.connector
 from datetime import datetime
 import tkinter
+import matplotlib.pyplot as plt
 
 
 gap_size = 20*60*1000
@@ -22,7 +23,7 @@ class Session:
         self.min_V = minV
         self.max_V = maxV
         self.p_list = []
-        self.quality = -99
+        self.quality = 4
 
     def __str__(self):
         return "Session from %s to %s \nDuration: %.1f min material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
@@ -51,16 +52,14 @@ class Rate_analyzer:
         print("Done segments")
         print("Done tags")
         self.make_bins()
-        print(time.time()-start_time)
 
 
-
-    def make_bins(self, material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
+    def make_bins(self, session_quality = 4,material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
         self.v_bins = [0]*int(accelerator_range/bin_size)
         self.p_bins = [0]*int(accelerator_range/bin_size)
         self.rates = [0]*int(accelerator_range/bin_size)
         for session in self.session_list:   
-            if session.start > start and session.end < end:
+            if session.start > start and session.end < end and session.quality >= session_quality:
                 if (dustID ==-1 or session.dustID == dustID) and  (material == None or session.material == material):
                     for i in range(int(accelerator_range/bin_size)):
                         if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size:
@@ -83,25 +82,8 @@ class Rate_analyzer:
 
         #print("Total of %d particles" %(sum(p for p in self.p_bins)))
 
-        ar = [0]*10
-        su = 0
-        for s in self.session_list:
-            if len(s.p_list) ==0: 
-                ar[0] +=1
-                su += s.duration
 
-            if len(s.p_list) ==1:
-                su += s.duration
-                ar[1] +=1
-            if len(s.p_list) ==2: 
-                ar[2] +=1
-                su += s.duration
 
-            if len(s.p_list )==3: ar[3] +=1
-            if len(s.p_list) ==4: ar[4] +=1
-            if 5<=len(s.p_list)<=10: ar[5] +=1
-        print(ar)
-        print(su)
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
 
@@ -125,6 +107,8 @@ class Rate_analyzer:
                     session.p_list.append(self.particles[p_index])
                 p_index+=1
 
+            if session.quality!=1 and len(session.p_list) < 10 :session.quality = 3
+
         
     def experiment_segment(self):
         s_index = 0
@@ -136,7 +120,7 @@ class Rate_analyzer:
                 e_index += 1
 
             session.experimentID = self.experiments[e_index-1][1]
-            
+            if self.experiments[e_index-1][2] == 9: session.quality = 1
             if self.experiments[e_index][0] < session.end:
                 del self.session_list[s_index]
                 self.session_list.insert(s_index, Session(self.experiments[e_index][0]+1,\
@@ -214,7 +198,8 @@ class Rate_analyzer:
         stops = cursor.fetchall()
         self.stops = [time[0] for time in stops]
         print(".",end = "")
-        cursor.execute("SELECT integer_timestamp,id_experiment_settings\
+
+        cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
         self.experiments = cursor.fetchall()
 
@@ -234,12 +219,24 @@ class Rate_analyzer:
             self.type_to_name[d[0]] = d[1]   
 
 
-        query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-        FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
-        AND velocity >= 0) ORDER BY integer_timestamp ASC"
-        cursor.execute(query)
-        self.particles = cursor.fetchall()
-
+        self.particles = []
+        try:
+            with open('particles.csv', 'r') as particle_file:
+                for line in particle_file:
+                    vals = line.split(",")
+                    part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
+                    self.particles.append(part)
+        except FileNotFoundError:
+            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+            FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
+            AND velocity >= 0) ORDER BY integer_timestamp ASC"
+            cursor.execute(query)
+            self.particles = cursor.fetchall()
+            particle_file = open("particles.csv","w")
+            for particle in self.particles:
+                particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
+            particle_file.close()
+        
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
 #a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 
