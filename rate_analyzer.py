@@ -4,7 +4,7 @@ import tkinter
 import matplotlib.pyplot as plt
 
 
-gap_size = 5*60*1000
+gap_size = 20*60*1000
 accelerator_range = 100
 bin_size = .1
  
@@ -44,7 +44,7 @@ class Rate_analyzer:
         self.generate_stops()
         
         print("Done stops")
-    
+        self.frequency_segment()
         self.velocity_segment()
         self.experiment_segment()
         self.tag_sessions()
@@ -57,6 +57,8 @@ class Rate_analyzer:
         for s in self.session_list:
             if 1562082557513 > s.start and 1562082557513 < s.end: print("RRREEEEEE")
         self.make_bins(material="Iron")
+
+
         print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
 
     def make_bins(self, session_quality = 4,material = None, start = 1380573080182, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
@@ -155,8 +157,12 @@ class Rate_analyzer:
         plt.xlabel("Quality")
         plt.ylabel("Hours")
 
+        plt.show(block = False)
+        plt.figure()
+        bins = [i for i in range(50)]
+        vals = [len(s.p_list) for s in self.session_list]
+        plt.hist(vals,bins = bins)
         plt.show()
-
 
     def tag_sessions(self):
 
@@ -180,6 +186,26 @@ class Rate_analyzer:
 
             if session.quality>2 and len(session.p_list) < 10 :session.quality = 2
             if session.quality==4 and len(session.p_list) > 300: session.quality = 5
+
+    def frequency_segment(self):
+        f_index =0
+        s_index =0
+        while s_index < len(self.session_list):
+            session = self.session_list[s_index]
+            while f_index< len(self.frequency_gaps)-2 and self.frequency_gaps[f_index][0] < session.start:
+                f_index+=1
+
+            if f_index< len(self.frequency_gaps)-2 and self.frequency_gaps[f_index][1] <= session.end \
+                and self.frequency_gaps[f_index][1] > session.start:
+                del self.session_list[s_index]
+                self.session_list.insert(s_index, Session(self.frequency_gaps[f_index][1]+1,\
+                                    session.end,session.min_V,session.max_V))
+                self.session_list.insert(s_index, Session(session.start,\
+                                    self.frequency_gaps[f_index][0]-1,session.min_V,session.max_V))
+                f_index -=2
+                s_index -=2
+            s_index+=1
+
     def frequency_tag(self):
         s_index =0
         for session in self.session_list:
@@ -190,7 +216,7 @@ class Rate_analyzer:
             while s_index< len(self.stops)-1 and self.stops[s_index][0] <= session.end:
                 stop_count+=1
                 s_index+=1
-            if stop_count >0 and session.duration > 5*60*1000: 
+            if stop_count >1 and session.duration > 5*60*1000: 
                 print(session,stop_count)
                 if session.quality>3: session.quality=3
 
@@ -300,6 +326,11 @@ class Rate_analyzer:
         self.stops = cursor.fetchall()
         #self.stops = [time[0] for time in stops]
         print(".",end = "")
+
+        cursor.execute("SELECT integer_timestamp,LEAD(integer_timestamp) over \
+            (order by integer_timestamp) as next FROM ccldas_production.source_settings\
+                 where frequency = 0 order by integer_timestamp asc")
+        self.frequency_gaps = cursor.fetchall()
 
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
