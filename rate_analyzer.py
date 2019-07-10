@@ -1,3 +1,4 @@
+import mysql
 import mysql.connector
 from datetime import datetime
 import tkinter
@@ -19,6 +20,8 @@ low_count_quality_count = 10
 default_quality = 4
 high_count_quality = 5
 high_count_quality_count = 300
+low_time_quality = 3
+low_time_quality_time = 20*60*1000
 
 
 
@@ -61,7 +64,7 @@ class Rate_analyzer:
 
 
         self.make_bins(material="Iron")
-
+        self.display_quality_data()
 
         print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
 
@@ -93,9 +96,12 @@ class Rate_analyzer:
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
 
+    def display_quality_data(self):
+        
         plt.figure()
-        plt.suptitle('1: Maintenance    2: Event Count <10    3: Frequency to 0 during session \
-    4: 10 < Event Count < 300    5: Event Count > 300', fontsize=16)
+        plt.suptitle('1: Maintenance    2: Event Count <%d    3: Duration under %d min \
+    4: Event Count < 300    5: Event Count > 300' \
+        %(low_count_quality_count,low_time_quality_time/60/1000), fontsize=16)
         plt.subplots_adjust(wspace=.35)
         plt.subplot(131)
 
@@ -152,8 +158,11 @@ class Rate_analyzer:
 
             if session.quality>low_count_quality and len(session.p_list) < low_count_quality_count :
                 session.quality = low_count_quality
+            if session.quality > low_time_quality and session.duration < low_time_quality_time:
+                session.quality = low_time_quality
             if session.quality >= default_quality and len(session.p_list) < high_count_quality_count:
                 session.quality = default_quality
+
             
 
     def frequency_segment(self):
@@ -243,20 +252,30 @@ class Rate_analyzer:
         
 
     def pull_data(self,hostname, usr, password, db):
-        print("Fetching Data",flush= True)
+        print("Fetching Data")
         start_time = time.time()
+
         mydb = mysql.connector.connect(host=hostname, user=usr,\
             passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
-        
+        print("Fetching Data",flush= True)
+
         cursor.execute("select integer_timestamp, velocity_max, \
         velocity_min from psu order by integer_timestamp ASC")
         self.velocities = cursor.fetchall()
+        print("Fetching Data",flush= True)
 
         cursor.execute("SELECT integer_timestamp,LEAD(integer_timestamp) over \
-            (order by integer_timestamp) as next FROM ccldas_production.source_settings\
+            (order by integer_timestamp) as next,frequency FROM ccldas_production.source_settings\
                  where frequency = 0 order by integer_timestamp asc")
-        self.frequency_gaps = cursor.fetchall()
+        frequencies = cursor.fetchall()]
+        self.frequency_gaps = []
+        for i in range(len(frequencies)-1):
+            f = frequencies[i]
+            if f[2]==0: 
+                self.frequency_gaps.append(f)
+                self.frequency_gaps.append(frequencies[i+1])
+
 
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
@@ -279,35 +298,35 @@ class Rate_analyzer:
 
 
         self.particles = []
-        try:
-            with open('particles.csv', 'r') as particle_file:
-                print("Fetching particles locally",flush= True)
-                for line in particle_file:
-                    vals = line.split(",")
-                    part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
-                    self.particles.append(part)
-                query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-                FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
-                AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
-                cursor.execute(query)
-                for particle in cursor.fetchall():
-                    self.particles.append(particle)
+        # try:
+        #     with open('particles.csv', 'r') as particle_file:
+        #         print("Fetching particles locally",flush= True)
+        #         for line in particle_file:
+        #             vals = line.split(",")
+        #             part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
+        #             self.particles.append(part)
+        #         query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+        #         FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
+        #         AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
+        #         cursor.execute(query)
+        #         for particle in cursor.fetchall():
+        #             self.particles.append(particle)
 
-        except FileNotFoundError:
-            print("Fetching particles by web",flush= True)
-            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-            FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
-            AND velocity >= 0) ORDER BY integer_timestamp ASC"
-            cursor.execute(query)
-            self.particles = cursor.fetchall()
-            particle_file = open("particles.csv","w")
-            for particle in self.particles:
-                particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
-            particle_file.close()
-            print("All data fetched. Time: ",time.time()-start_time,flush= True)
+        # except FileNotFoundError:
+        print("Fetching particles by web",flush= True)
+        query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+        FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
+        AND velocity >= 0) ORDER BY integer_timestamp ASC"
+        cursor.execute(query)
+        self.particles = cursor.fetchall()
+        # particle_file = open("particles.csv","w")
+        # for particle in self.particles:
+        #     particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
+        # particle_file.close()
+        # print("All data fetched. Time: ",time.time()-start_time,flush= True)
 
 
-            
+
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
 #a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 
