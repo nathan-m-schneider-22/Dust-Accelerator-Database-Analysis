@@ -11,3 +11,4 @@ IDL*
 *.png
 matplotlib/
 .vscode/
+Test*
