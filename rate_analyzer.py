@@ -4,7 +4,7 @@ import tkinter
 import matplotlib.pyplot as plt
 
 
-gap_size = 20*60*1000
+gap_size = 5*60*1000
 accelerator_range = 100
 bin_size = .1
  
@@ -48,12 +48,18 @@ class Rate_analyzer:
         self.velocity_segment()
         self.experiment_segment()
         self.tag_sessions()
+        #self.voltage_tag()
+
+        self.frequency_tag()
 
         print("Done segments")
         print("Done tags")
+        for s in self.session_list:
+            if 1562082557513 > s.start and 1562082557513 < s.end: print("RRREEEEEE")
         self.make_bins(material="Iron")
+        print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
 
-    def make_bins(self, session_quality = 4,material = None, start = 0, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
+    def make_bins(self, session_quality = 4,material = None, start = 1380573080182, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
         self.v_bins = [0]*int(accelerator_range/bin_size)
         self.p_bins = [0]*int(accelerator_range/bin_size)
         self.rates = [0]*int(accelerator_range/bin_size)
@@ -86,39 +92,71 @@ class Rate_analyzer:
         print("Total rate for range is %f particles per hour" % \
             ( sum (rate for rate in self.rates)))
 
-        plt.subplot(231)
-        self.v_bins = [ s/1000/60/60 for s in self.v_bins]
-        plt.plot(self.v_bins)
-        plt.title("Run time totals")
-        plt.subplot(232)
-        p_ar = [p[2]/1000 for p in self.particles]
-        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
-        plt.title("Particle distribution")
+        # plt.subplot(231)
+        # self.v_bins = [ s/1000/60/60 for s in self.v_bins]
+        # plt.plot(self.v_bins)
+        # plt.title("Run time totals")
+        # plt.subplot(232)
+        # p_ar = [p[2]/1000 for p in self.particles]
+        # plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        # plt.title("Particle distribution")
 
-        plt.subplot(233)
-        plt.plot(self.rates)
+        # plt.subplot(233)
+        # plt.plot(self.rates)
 
-        plt.title("Rates of detection")
-        plt.subplot(234)
+        # plt.title("Rates of detection")
+        # plt.subplot(234)
+
+        # qualities = [s.quality for s in self.session_list]
+        # plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
+        # plt.title("Session qualities")
+
+        # plt.subplot(235)
+
+        # p_ar = [p[2]/1000 for p in self.particles]
+        # plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        # plt.title("Particle distribution (log scale)")
+        # plt.yscale("log")
+
+        # plt.subplot(236)
+        # plt.plot(self.rates)
+
+        # plt.title("Rates of detection (log scale)")
+        # plt.yscale("log")
+        # #plt.show(block= False)
+
+        plt.figure()
+        plt.suptitle('1: Maintenance    2: Event Count <10    3: Frequency to 0 during session \
+    4: 10 < Event Count < 300    5: Event Count > 300', fontsize=16)
+        plt.subplots_adjust(wspace=.35)
+        plt.subplot(131)
 
         qualities = [s.quality for s in self.session_list]
         plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
-        plt.title("Session qualities")
+        plt.title("Session quality counts")
+        plt.xlabel("Quality")
+        plt.ylabel("Number of sessions")
 
-        plt.subplot(235)
+        plt.subplot(132)
+        plt.title("Particles of each quality")
+        plt.xlabel("Quality")
+        plt.ylabel("Number of particles")
 
-        p_ar = [p[2]/1000 for p in self.particles]
-        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
-        plt.title("Particle distribution (log scale)")
-        plt.yscale("log")
+        ar = [0]*6
+        for s in self.session_list: ar[s.quality]+= len(s.p_list)
 
-        plt.subplot(236)
-        plt.plot(self.rates)
+        plt.bar([i for i in range(6)], ar)
 
-        plt.title("Rates of detection (log scale)")
-        plt.yscale("log")
+        plt.subplot(133)
+
+        qualities = [0]*6
+        plt.bar([0,1,2,3,4,5],[sum(s.duration for s in self.session_list if s.quality==i)/1000/60/60 for i in range(6)])
+        plt.title("Session runtimes")
+        plt.xlabel("Quality")
+        plt.ylabel("Hours")
 
         plt.show()
+
 
     def tag_sessions(self):
 
@@ -140,9 +178,39 @@ class Rate_analyzer:
                     session.p_list.append(self.particles[p_index])
                 p_index+=1
 
-            if session.quality!=1 and len(session.p_list) < 10 :session.quality = 3
+            if session.quality>2 and len(session.p_list) < 10 :session.quality = 2
+            if session.quality==4 and len(session.p_list) > 300: session.quality = 5
+    def frequency_tag(self):
+        s_index =0
+        for session in self.session_list:
+            while s_index< len(self.stops)-1 and self.stops[s_index][0] < session.start:
+                s_index+=1
 
-        
+            stop_count = 0
+            while s_index< len(self.stops)-1 and self.stops[s_index][0] <= session.end:
+                stop_count+=1
+                s_index+=1
+            if stop_count >0 and session.duration > 5*60*1000: 
+                print(session,stop_count)
+                if session.quality>3: session.quality=3
+
+    def voltage_tag(self):
+        v_index =0
+        for session in self.session_list:
+            while self.voltages[v_index][0] < session.start:
+                v_index+=1
+                
+            v_list = []            
+            while self.voltages[v_index][0] <= session.end:
+                v_list.append(self.voltages[v_index][1])
+                v_index+=1
+
+            if len(v_list) > 0: average = sum(v_list)/len(v_list)
+            else: average = -1
+            if average < 1.5 and average >0: 
+                if session.quality >=3: session.quality = 2
+                print(session,average)
+
     def experiment_segment(self):
         s_index = 0
         e_index = 0
@@ -220,16 +288,17 @@ class Rate_analyzer:
         velocity_min from psu order by integer_timestamp ASC")
         self.velocities = cursor.fetchall()
         print(".",end = "")
-        cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-        WHERE !(frequency=0 OR needle_voltage=0 OR amplitude=0)")
-        starts = cursor.fetchall()
-        self.starts = [ time[0] for time in starts]
-        print(".",end = "")
+
+        # cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
+        # WHERE !(frequency=0 OR needle_voltage=0 OR amplitude=0)")
+        # starts = cursor.fetchall()
+        # self.starts = [ time[0] for time in starts]
+        # print(".",end = "")
 
         cursor.execute("SELECT integer_timestamp FROM ccldas_production.source_settings\
-        WHERE (frequency=0 OR needle_voltage=0  OR amplitude=0)")
-        stops = cursor.fetchall()
-        self.stops = [time[0] for time in stops]
+        WHERE (frequency=0) order by integer_timestamp ASC")
+        self.stops = cursor.fetchall()
+        #self.stops = [time[0] for time in stops]
         print(".",end = "")
 
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
@@ -255,11 +324,20 @@ class Rate_analyzer:
         self.particles = []
         try:
             with open('particles.csv', 'r') as particle_file:
+                print("Fetching particles locally")
                 for line in particle_file:
                     vals = line.split(",")
                     part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
                     self.particles.append(part)
+                query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+                FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
+                AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
+                cursor.execute(query)
+                for particle in cursor.fetchall():
+                    self.particles.append(particle)
+
         except FileNotFoundError:
+            print("Fetching particles by web")
             query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
             FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
             AND velocity >= 0) ORDER BY integer_timestamp ASC"
@@ -269,7 +347,35 @@ class Rate_analyzer:
             for particle in self.particles:
                 particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
             particle_file.close()
-        
+
+        # self.voltages = []                
+        # try:
+        #     with open('voltages.csv', 'r') as voltage_file:
+        #         print("Fetching voltages locally")
+        #         for line in voltage_file:
+        #             vals = line.split(",")
+        #             volt = (int(vals[0]),float(vals[1]))
+        #             self.voltages.append(volt)
+        #         query = "SELECT integer_timestamp, high_voltage\
+        #         FROM ccldas_production.pelletron_data WHERE (integer_timestamp >%d)\
+        #              ORDER BY integer_timestamp ASC" % (self.voltages[-1][0])
+        #         cursor.execute(query)
+        #         for voltage in cursor.fetchall():
+        #             self.voltages.append(voltage)
+
+        # except FileNotFoundError:
+        #     print("Fetching voltages by web")
+
+        #     query = "SELECT integer_timestamp, high_voltage\
+        #         FROM ccldas_production.pelletron_data \
+        #              ORDER BY integer_timestamp ASC"
+        #     cursor.execute(query)
+        #     self.voltages = cursor.fetchall()
+        #     voltage_file = open("voltages.csv","w")
+        #     for volt in self.voltages:
+        #         voltage_file.write("%d,%f\n" %(volt[0],volt[1]))
+        #     voltage_file.close()
+
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
 #a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 
