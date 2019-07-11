@@ -3,7 +3,7 @@ import mysql.connector
 from datetime import datetime
 import tkinter
 import matplotlib.pyplot as plt
-
+import pickle
 
 gap_size = 20*60*1000
 accelerator_range = 100
@@ -62,11 +62,17 @@ class Rate_analyzer:
 
         self.particle_tag()
 
+        self.write_data()
 
         self.make_bins(material="Iron")
-        self.display_quality_data()
+        #.display_quality_data()
 
         print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
+
+    def write_data(self):
+        with open("temp_data.pkl","wb") as save_file:
+            pickle.dump(self.session_list,save_file)
+        
 
     def make_bins(self, session_quality = default_quality_min,material = None, \
         start = data_start, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
@@ -268,7 +274,7 @@ class Rate_analyzer:
         cursor.execute("SELECT integer_timestamp,LEAD(integer_timestamp) over \
             (order by integer_timestamp) as next,frequency FROM ccldas_production.source_settings\
                  where frequency = 0 order by integer_timestamp asc")
-        frequencies = cursor.fetchall()]
+        frequencies = cursor.fetchall()
         self.frequency_gaps = []
         for i in range(len(frequencies)-1):
             f = frequencies[i]
@@ -276,7 +282,7 @@ class Rate_analyzer:
                 self.frequency_gaps.append(f)
                 self.frequency_gaps.append(frequencies[i+1])
 
-
+        print(len(self.frequency_gaps))
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
         self.experiments = cursor.fetchall()
@@ -298,32 +304,32 @@ class Rate_analyzer:
 
 
         self.particles = []
-        # try:
-        #     with open('particles.csv', 'r') as particle_file:
-        #         print("Fetching particles locally",flush= True)
-        #         for line in particle_file:
-        #             vals = line.split(",")
-        #             part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
-        #             self.particles.append(part)
-        #         query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-        #         FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
-        #         AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
-        #         cursor.execute(query)
-        #         for particle in cursor.fetchall():
-        #             self.particles.append(particle)
+        try:
+            with open('particles.csv', 'r') as particle_file:
+                print("Fetching particles locally",flush= True)
+                for line in particle_file:
+                    vals = line.split(",")
+                    part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
+                    self.particles.append(part)
+                query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+                FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
+                AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
+                cursor.execute(query)
+                for particle in cursor.fetchall():
+                    self.particles.append(particle)
 
-        # except FileNotFoundError:
-        print("Fetching particles by web",flush= True)
-        query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
-        FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
-        AND velocity >= 0) ORDER BY integer_timestamp ASC"
-        cursor.execute(query)
-        self.particles = cursor.fetchall()
-        # particle_file = open("particles.csv","w")
-        # for particle in self.particles:
-        #     particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
-        # particle_file.close()
-        # print("All data fetched. Time: ",time.time()-start_time,flush= True)
+        except FileNotFoundError:
+            print("Fetching particles by web",flush= True)
+            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+            FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
+            AND velocity >= 0) ORDER BY integer_timestamp ASC"
+            cursor.execute(query)
+            self.particles = cursor.fetchall()
+            particle_file = open("particles.csv","w")
+            for particle in self.particles:
+                particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
+            particle_file.close()
+            print("All data fetched. Time: ",time.time()-start_time,flush= True)
 
 
 

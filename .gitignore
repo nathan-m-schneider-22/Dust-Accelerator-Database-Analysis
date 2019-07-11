@@ -12,3 +12,4 @@ IDL*
 matplotlib/
 .vscode/
 Test*
+*.pkl
