@@ -6,9 +6,9 @@ import matplotlib.pyplot as plt
 import pickle
 
 gap_size = 20*60*1000
+data_start = 1380573080182
 accelerator_range = 100
 bin_size = .1
-data_start = 1380573080182
 
 
 
@@ -64,11 +64,11 @@ class Rate_analyzer:
 
         self.write_data()
 
-        self.make_bins(material="Iron")
+        #self.make_bins(material="Iron")
         #.display_quality_data()
 
         print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
-
+        print("sessions fetched and saved")
     def write_data(self):
         with open("temp_data.pkl","wb") as save_file:
             pickle.dump(self.session_list,save_file)
