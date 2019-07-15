@@ -1,11 +1,6 @@
 Dump*
-
 .idea*
-
-Dump*
-
 IDL*
-
 *.csv
 *.png
 *.png
@@ -13,4 +8,4 @@ matplotlib/
 .vscode/
 Test*
 *.pkl
-example*
+*.txt

@@ -65,10 +65,9 @@ class Rate_analyzer:
         self.write_data()
 
         #self.make_bins(material="Iron")
-        #.display_quality_data()
+        #self.display_quality_data()
 
-        print("Total runtime: ",sum(s.duration for s in self.session_list)/1000/60/60)
-        print("sessions fetched and saved")
+        print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60))
     def write_data(self):
         with open("temp_data.pkl","wb") as save_file:
             pickle.dump(self.session_list,save_file)
@@ -258,18 +257,15 @@ class Rate_analyzer:
         
 
     def pull_data(self,hostname, usr, password, db):
-        print("Fetching Data")
         start_time = time.time()
 
         mydb = mysql.connector.connect(host=hostname, user=usr,\
             passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
-        print("Fetching Data",flush= True)
 
         cursor.execute("select integer_timestamp, velocity_max, \
         velocity_min from psu order by integer_timestamp ASC")
         self.velocities = cursor.fetchall()
-        print("Fetching Data",flush= True)
 
         cursor.execute("SELECT integer_timestamp,LEAD(integer_timestamp) over \
             (order by integer_timestamp) as next,frequency FROM ccldas_production.source_settings\
@@ -282,7 +278,6 @@ class Rate_analyzer:
                 self.frequency_gaps.append(f)
                 self.frequency_gaps.append(frequencies[i+1])
 
-        print(len(self.frequency_gaps))
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
         self.experiments = cursor.fetchall()
@@ -329,7 +324,7 @@ class Rate_analyzer:
             for particle in self.particles:
                 particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
             particle_file.close()
-            print("All data fetched. Time: ",time.time()-start_time,flush= True)
+        print("All data fetched. Time: %.2f seconds" %(time.time()-start_time))
 
 
 
