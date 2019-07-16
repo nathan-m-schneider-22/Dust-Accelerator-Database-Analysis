@@ -64,8 +64,9 @@ class Rate_analyzer:
 
         self.write_data()
 
-        #self.make_bins(material="Iron")
+        self.make_bins()    
         #self.display_quality_data()
+        self.display_particle_data()
 
         print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60))
     def write_data(self):
@@ -89,17 +90,17 @@ class Rate_analyzer:
                         velocity = particle[2]/1000
                         if velocity >= v_min and velocity < v_max: self.p_bins[ int(velocity/bin_size)]+=1
 
-        print("For Material: %s, Time %s-%s DustID: %d Velocity %.2f-%.2f" %\
-            (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
-                datetime.fromtimestamp(end/1000).strftime("%c"),dustID, v_min,v_max))
+        # print("For Material: %s, Time %s-%s DustID: %d Velocity %.2f-%.2f" %\
+        #     (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
+        #         datetime.fromtimestamp(end/1000).strftime("%c"),dustID, v_min,v_max))
 
-                
+         
         for i in range(int(accelerator_range/bin_size)):
             if self.v_bins[i] !=0: self.rates[i] = self.p_bins[i]/(self.v_bins[i]/1000/60/60)
             else: self.rates[i] = 0
 
-        print("Total rate for range is %f particles per hour" % \
-            ( sum (rate for rate in self.rates)))
+        # print("Total rate for range is %f particles per hour" % \
+        #     ( sum (rate for rate in self.rates)))
 
     def display_quality_data(self):
         
@@ -139,7 +140,42 @@ class Rate_analyzer:
         bins = [i for i in range(50)]
         vals = [len(s.p_list) for s in self.session_list]
         plt.hist(vals,bins = bins)
-        plt.show()
+        plt.show(block = False)
+
+    def display_particle_data(self):
+        plt.figure(figsize=(10,8))
+        plt.subplot(231)
+        self.v_bins = [ s/1000/60/60 for s in self.v_bins]
+        plt.plot(self.v_bins)
+        plt.title("Run time totals")
+        plt.subplot(232)
+        p_ar = [p[2]/1000 for p in self.particles]
+        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        plt.title("Particle distribution")
+
+        plt.subplot(233)
+        plt.plot(self.rates)
+
+        plt.title("Rates of detection")
+        plt.subplot(234)
+
+        qualities = [s.quality for s in self.session_list]
+        plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
+        plt.title("Session qualities")
+
+        plt.subplot(235)
+
+        p_ar = [p[2]/1000 for p in self.particles]
+        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
+        plt.title("Particle distribution (log scale)")
+        plt.yscale("log")
+
+        plt.subplot(236)
+        plt.plot(self.rates)
+
+        plt.title("Rates of detection (log scale)")
+        plt.yscale("log")
+        plt.savefig("particle_data.png")
 
     def particle_tag(self):
 
@@ -157,8 +193,7 @@ class Rate_analyzer:
             else: self.empty_sessions.append(session)
             
             while self.particles[p_index][0] <= session.end:
-                if self.particles[p_index][3] >= 3: 
-                    session.p_list.append(self.particles[p_index])
+                session.p_list.append(self.particles[p_index])
                 p_index+=1
 
             if session.quality>low_count_quality and len(session.p_list) < low_count_quality_count :
