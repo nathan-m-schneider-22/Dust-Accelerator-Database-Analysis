@@ -4,6 +4,8 @@ from datetime import datetime
 import tkinter
 import matplotlib.pyplot as plt
 import pickle
+import numpy as np
+import matplotlib.dates as mdates
 
 gap_size = 20*60*1000
 data_start = 1380573080182
@@ -102,45 +104,44 @@ class Rate_analyzer:
         # print("Total rate for range is %f particles per hour" % \
         #     ( sum (rate for rate in self.rates)))
 
-    def display_quality_data(self):
+    # def display_quality_data(self):
         
-        plt.figure()
-        plt.suptitle('1: Maintenance    2: Event Count <%d    3: Duration under %d min \
-    4: Event Count < 300    5: Event Count > 300' \
-        %(low_count_quality_count,low_time_quality_time/60/1000), fontsize=16)
-        plt.subplots_adjust(wspace=.35)
-        plt.subplot(131)
+    #     plt.figure()
+    #     plt.suptitle('1: Maintenance    2: Event Count <%d    3: Duration under %d min \
+    # 4: Event Count < 300    5: Event Count > 300' \
+    #     %(low_count_quality_count,low_time_quality_time/60/1000), fontsize=16)
+    #     plt.subplots_adjust(wspace=.35)
+    #     plt.subplot(131)
 
-        qualities = [s.quality for s in self.session_list]
-        plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
-        plt.title("Session quality counts")
-        plt.xlabel("Quality")
-        plt.ylabel("Number of sessions")
+    #     qualities = [s.quality for s in self.session_list]
+    #     plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
+    #     plt.title("Session quality counts")
+    #     plt.xlabel("Quality")
+    #     plt.ylabel("Number of sessions")
 
-        plt.subplot(132)
-        plt.title("Particles of each quality")
-        plt.xlabel("Quality")
-        plt.ylabel("Number of particles")
+    #     plt.subplot(132)
+    #     plt.title("Particles of each quality")
+    #     plt.xlabel("Quality")
+    #     plt.ylabel("Number of particles")
 
-        ar = [0]*6
-        for s in self.session_list: ar[s.quality]+= len(s.p_list)
+    #     ar = [0]*6
+    #     for s in self.session_list: ar[s.quality]+= len(s.p_list)
 
-        plt.bar([i for i in range(6)], ar)
+    #     plt.bar([i for i in range(6)], ar)
 
-        plt.subplot(133)
+    #     plt.subplot(133)
 
-        qualities = [0]*6
-        plt.bar([0,1,2,3,4,5],[sum(s.duration for s in self.session_list if s.quality==i)/1000/60/60 for i in range(6)])
-        plt.title("Session runtimes")
-        plt.xlabel("Quality")
-        plt.ylabel("Hours")
+    #     qualities = [0]*6
+    #     plt.bar([0,1,2,3,4,5],[sum(s.duration for s in self.session_list if s.quality==i)/1000/60/60 for i in range(6)])
+    #     plt.title("Session runtimes")
+    #     plt.xlabel("Quality")
+    #     plt.ylabel("Hours")
+    #     plt.savefig("session_quality_data.png")
 
-        plt.show(block = False)
-        plt.figure()
-        bins = [i for i in range(50)]
-        vals = [len(s.p_list) for s in self.session_list]
-        plt.hist(vals,bins = bins)
-        plt.show(block = False)
+        # plt.figure()
+        # bins = [i for i in range(50)]
+        # vals = [len(s.p_list) for s in self.session_list]
+        # plt.hist(vals,bins = bins)
 
     def display_particle_data(self):
         plt.figure(figsize=(10,8))
