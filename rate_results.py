@@ -123,7 +123,7 @@ def generate_results_graphs(session_list):
 def generate_bins_graphs(session_list,v_bins,p_bins,rates):
 
     plt.figure()
-    v_bins = [ s/1000/60/60 for s in v_bins]
+    v_bins = [s/1000/60/60 for s in v_bins]
     plt.plot([i/10 for i in range(accelerator_range*10)],v_bins)
     plt.title("Run time total for each velocity bin")
     plt.xlabel("Velocity range bins")
@@ -146,7 +146,7 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     plt.title("Rates of dust detection")
     plt.yscale("log")
     plt.xlabel("Velocity range bins")
-    plt.ylabel("Rate of detection (particles/hour")
+    plt.ylabel("Rate of detection (particles/hour)")
     plt.savefig("results_rates.png")
 
 def make_bins(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min , \
@@ -172,7 +172,8 @@ def make_bins(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min , \
                         used_sessions.append(session)
                         used_particles = []
                         for i in range(int(accelerator_range/bin_size)):
-                            if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size:
+                            if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size and\
+                                v_min<(i+1)*bin_size and v_max >= (i)*bin_size:
                                 v_bins[i] += session.duration
                         session_time_sum += session.duration
                         session_sum +=1
