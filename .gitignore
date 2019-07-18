@@ -9,3 +9,5 @@ matplotlib/
 Test*
 *.pkl
 *.txt
+get-pip.py
+
