@@ -69,7 +69,7 @@ class Session:
         self.experimentID = None
         self.min_V = minV
         self.max_V = maxV
-        self.p_list = []
+        self.particle_list = []
         self.quality = 5
 
     #Debugging to_string method
@@ -79,7 +79,7 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
 " %(datetime.fromtimestamp(self.start/1000).strftime("%c"),\
             datetime.fromtimestamp(self.end/1000).strftime("%c"),\
             self.duration/1000/60,self.material,self.min_V,self.max_V,self.start,self.end,\
-            self.dustID,self.experimentID,len(self.p_list),self.quality)
+            self.dustID,self.experimentID,len(self.particle_list),self.quality)
     
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
@@ -117,7 +117,7 @@ class Rate_analyzer:
         print("Valid: %d Empty: %d" %(len(self.valid_sessions),len(self.empty_sessions)))
         print("Valid time: %d Empty time: %d" %(sum(s.duration for s in self.valid_sessions),\
             sum(s.duration for s in self.empty_sessions)))
-        print("Total Particles: %d" %(sum(len(s.p_list) for s in self.valid_sessions)))
+        print("Total Particles: %d" %(sum(len(s.particle_list) for s in self.valid_sessions)))
 
     # pull_data takes the login credentials for the database and populates the important input fields of 
     # the rate analyzer class.
@@ -368,19 +368,19 @@ class Rate_analyzer:
             
             #Add all the particles within the session to the session's particle list
             while self.particles[particle_index][0] <= session.end:
-                session.p_list.append(self.particles[particle_index])
+                session.particle_list.append(self.particles[particle_index])
                 particle_index+=1
 
             #Assign qualities to the sessions 
             if session.experimentID == maintenance_id: session.quality = maintenance_quality
 
-            if session.quality>low_count_quality and len(session.p_list) < low_count_quality_count :
+            if session.quality>low_count_quality and len(session.particle_list) < low_count_quality_count :
                 session.quality = low_count_quality
 
             if session.quality > low_time_quality and session.duration < low_time_quality_time:
                 session.quality = low_time_quality
 
-            if session.quality >= default_quality and len(session.p_list) < high_count_quality_count:
+            if session.quality >= default_quality and len(session.particle_list) < high_count_quality_count:
                 session.quality = default_quality
 
     #Use the pickle library to write the finalized list of sessions to temp_data.pkl
