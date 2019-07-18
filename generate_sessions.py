@@ -1,34 +1,63 @@
+"""
+generate_sessions.py      Nathan Schneider     July 18 2019
+The purpose of this program is to facilitate the calculation of dust detection rates
+for various parameters by generating a list of active sessions from the data. This
+allows for the calculation of tagged runtime, which is currently not supported by the
+database. This program pulls the necessary data from the mySQL production server,
+segments it into sessions, and classifies each session with the following characteristics:
+Start and stop times, in milliseconds as a unix timestamp, duration, the name of the dust
+material being shot, the dust type ID, the experiment ID, the range of selected velocities, 
+and a session quality.
+SESSION QUALITIES:
+1: Maintenance session
+2: Low number of particle detections <10
+3: Low runtime < 20 min
+4: Standard sessions
+5: High dust event count (productive session)
+
+IMPORTANT: This code requires python 3.X, the appopriate version of the mySQL Python Connector for Python 3.X,
+along with the matplotlib python package. These both have windows installers or can be installed on linux through pip.
+
+See README.md for more information
+"""
+
 import mysql
 import mysql.connector
 from datetime import datetime
 import tkinter
 import matplotlib.pyplot as plt
 import pickle
-import numpy as np
-import matplotlib.dates as mdates
+import time
 
+
+#The gap size referes to the segmentation of the dust event timeline into groups where the spacing between two events
+# is >= to the gap size. 
 gap_size = 20*60*1000
+
+#Useful data starts after 2013, or 1380573080182 in ms time.
 data_start = 1380573080182
-accelerator_range = 100
-bin_size = .1
 
 
-
-default_quality_min = 4
+#The experiment ID and quality for the maintenance sessions
 maintenance_quality =1
 maintenance_id = 9
+
+#Low count quality and limit
 low_count_quality = 2
 low_count_quality_count = 10
-default_quality = 4
-high_count_quality = 5
-high_count_quality_count = 300
+
+#Low runtime sessions with this quality, and a 20 min limit in ms
 low_time_quality = 3
 low_time_quality_time = 20*60*1000
 
+#Quality and counts for high quality
+default_quality = 4
+high_count_quality = 5
+high_count_quality_count = 300
 
 
-
-import time
+#The session class, used as useful storage class for session related data
+#A list of these will be saved and loaded for use in the rate analysis
 class Session:
     def __init__(self, start, end,minV,maxV):
         
@@ -43,6 +72,7 @@ class Session:
         self.p_list = []
         self.quality = 5
 
+    #Debugging to_string method
     def __str__(self):
         return "Session from %s to %s \nDuration: %.1f min material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
 ExperimentID: %s particles: %d Quality: %d\n------------------------------------------\
@@ -51,280 +81,92 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
             self.duration/1000/60,self.material,self.min_V,self.max_V,self.start,self.end,\
             self.dustID,self.experimentID,len(self.p_list),self.quality)
     
+#Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
+# to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
     def __init__(self,hostname, user, password, database):
 
+
+        #Pulls the data from local files and the SQL server
         self.pull_data(hostname,user, password, database)
 
+        #Groups the particles by splitting them in groups where there are gaps
         self.group_particles()
         
+        #Split these sessions by gaps where the pelletron is not firing
         self.frequency_segment()
-        self.velocity_tag_segment()
-        self.experiment_tag()
 
+        #Split the sessions along the velocity range changes, also give each session the velocity paramters
+        # at the time
+        self.velocity_tag_segment()
+
+        #Split the sessions along the experiment ID changes, also give each session the epxeriment ID 
+        # at the time
+        self.experiment_tag_segment()
+
+        #Use the data stored in each dust event to tag the session with the dustID and material
         self.particle_tag()
 
+        #Write the data to a local file, allowing the rate_results.py to calculate only the results, not pull
+        # and calculate all the data as in this program. 
         self.write_data()
 
-        self.make_bins()    
-        #self.display_quality_data()
-        self.display_particle_data()
-
+        #A few debugging statements
         print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60))
-    def write_data(self):
-        with open("temp_data.pkl","wb") as save_file:
-            pickle.dump(self.session_list,save_file)
-        
+        print("Total sessions: ",len(self.session_list))
+        print("Valid: %d Empty: %d" %(len(self.valid_sessions),len(self.empty_sessions)))
+        print("Valid time: %d Empty time: %d" %(sum(s.duration for s in self.valid_sessions),\
+            sum(s.duration for s in self.empty_sessions)))
+        print("Total Particles: %d" %(sum(len(s.p_list) for s in self.valid_sessions)))
 
-    def make_bins(self, session_quality = default_quality_min,material = None, \
-        start = data_start, end = 2000000000000, dustID = -1, v_min = 0, v_max = accelerator_range):
-        
-        self.v_bins = [0]*int(accelerator_range/bin_size)
-        self.p_bins = [0]*int(accelerator_range/bin_size)
-        self.rates = [0]*int(accelerator_range/bin_size)
-        for session in self.session_list:   
-            if session.start > start and session.end < end and session.quality >= session_quality:
-                if (dustID ==-1 or session.dustID == dustID) and  (material == None or session.material == material):
-                    for i in range(int(accelerator_range/bin_size)):
-                        if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size:
-                            self.v_bins[i] += session.duration
-                    for particle in session.p_list:
-                        velocity = particle[2]/1000
-                        if velocity >= v_min and velocity < v_max: self.p_bins[ int(velocity/bin_size)]+=1
-
-        # print("For Material: %s, Time %s-%s DustID: %d Velocity %.2f-%.2f" %\
-        #     (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
-        #         datetime.fromtimestamp(end/1000).strftime("%c"),dustID, v_min,v_max))
-
-         
-        for i in range(int(accelerator_range/bin_size)):
-            if self.v_bins[i] !=0: self.rates[i] = self.p_bins[i]/(self.v_bins[i]/1000/60/60)
-            else: self.rates[i] = 0
-
-        # print("Total rate for range is %f particles per hour" % \
-        #     ( sum (rate for rate in self.rates)))
-
-    # def display_quality_data(self):
-        
-    #     plt.figure()
-    #     plt.suptitle('1: Maintenance    2: Event Count <%d    3: Duration under %d min \
-    # 4: Event Count < 300    5: Event Count > 300' \
-    #     %(low_count_quality_count,low_time_quality_time/60/1000), fontsize=16)
-    #     plt.subplots_adjust(wspace=.35)
-    #     plt.subplot(131)
-
-    #     qualities = [s.quality for s in self.session_list]
-    #     plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
-    #     plt.title("Session quality counts")
-    #     plt.xlabel("Quality")
-    #     plt.ylabel("Number of sessions")
-
-    #     plt.subplot(132)
-    #     plt.title("Particles of each quality")
-    #     plt.xlabel("Quality")
-    #     plt.ylabel("Number of particles")
-
-    #     ar = [0]*6
-    #     for s in self.session_list: ar[s.quality]+= len(s.p_list)
-
-    #     plt.bar([i for i in range(6)], ar)
-
-    #     plt.subplot(133)
-
-    #     qualities = [0]*6
-    #     plt.bar([0,1,2,3,4,5],[sum(s.duration for s in self.session_list if s.quality==i)/1000/60/60 for i in range(6)])
-    #     plt.title("Session runtimes")
-    #     plt.xlabel("Quality")
-    #     plt.ylabel("Hours")
-    #     plt.savefig("session_quality_data.png")
-
-        # plt.figure()
-        # bins = [i for i in range(50)]
-        # vals = [len(s.p_list) for s in self.session_list]
-        # plt.hist(vals,bins = bins)
-
-    def display_particle_data(self):
-        plt.figure(figsize=(10,8))
-        plt.subplot(231)
-        self.v_bins = [ s/1000/60/60 for s in self.v_bins]
-        plt.plot(self.v_bins)
-        plt.title("Run time totals")
-        plt.subplot(232)
-        p_ar = [p[2]/1000 for p in self.particles]
-        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
-        plt.title("Particle distribution")
-
-        plt.subplot(233)
-        plt.plot(self.rates)
-
-        plt.title("Rates of detection")
-        plt.subplot(234)
-
-        qualities = [s.quality for s in self.session_list]
-        plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
-        plt.title("Session qualities")
-
-        plt.subplot(235)
-
-        p_ar = [p[2]/1000 for p in self.particles]
-        plt.hist(p_ar,bins = [i for i in range(0,accelerator_range,1)])
-        plt.title("Particle distribution (log scale)")
-        plt.yscale("log")
-
-        plt.subplot(236)
-        plt.plot(self.rates)
-
-        plt.title("Rates of detection (log scale)")
-        plt.yscale("log")
-        plt.savefig("particle_data.png")
-
-    def particle_tag(self):
-
-        self.empty_sessions = []
-        self.valid_sessions = []
-        p_index =0
-        for session in self.session_list:
-            while self.particles[p_index][0] < session.start:
-                p_index+=1
-            if self.particles[p_index][0] <= session.end:
-                session.dustID = self.particles[p_index][1]
-                session.material = self.type_to_name[self.info_to_type[self.particles[p_index][1]]]
-                self.valid_sessions.append(session)
-                
-            else: self.empty_sessions.append(session)
-            
-            while self.particles[p_index][0] <= session.end:
-                session.p_list.append(self.particles[p_index])
-                p_index+=1
-
-            if session.quality>low_count_quality and len(session.p_list) < low_count_quality_count :
-                session.quality = low_count_quality
-            if session.quality > low_time_quality and session.duration < low_time_quality_time:
-                session.quality = low_time_quality
-            if session.quality >= default_quality and len(session.p_list) < high_count_quality_count:
-                session.quality = default_quality
-
-            
-
-    def frequency_segment(self):
-        f_index =0
-        s_index =0
-        while s_index < len(self.session_list):
-            session = self.session_list[s_index]
-            while f_index< len(self.frequency_gaps)-2 and self.frequency_gaps[f_index][0] < session.start:
-                f_index+=1
-
-            if f_index< len(self.frequency_gaps)-2 and self.frequency_gaps[f_index][1] <= session.end \
-                and self.frequency_gaps[f_index][1] > session.start:
-                del self.session_list[s_index]
-                self.session_list.insert(s_index, Session(self.frequency_gaps[f_index][1]+1,\
-                                    session.end,session.min_V,session.max_V))
-                self.session_list.insert(s_index, Session(session.start,\
-                                    self.frequency_gaps[f_index][0]-1,session.min_V,session.max_V))
-                f_index -=2
-                s_index -=2
-            s_index+=1
-
-
-    def experiment_tag(self):
-        s_index = 0
-        e_index = 0
-        while s_index < len(self.session_list) and e_index < len(self.experiments):
-            session = self.session_list[s_index]
-            while e_index < len(self.experiments)-1 and \
-                self.experiments[e_index][0] < session.start:
-                e_index += 1
-
-            session.experimentID = self.experiments[e_index-1][1]
-            if self.experiments[e_index-1][2] == 9: session.quality = 1
-            if self.experiments[e_index][0] < session.end:
-                del self.session_list[s_index]
-                self.session_list.insert(s_index, Session(self.experiments[e_index][0]+1,\
-                                    session.end,session.min_V,session.max_V))
-                self.session_list.insert(s_index, Session(session.start,\
-                                    self.experiments[e_index][0]-1,session.min_V,session.max_V))
-                e_index-=1
-                s_index -=1
-                
-            s_index+=1
-            
-    def velocity_tag_segment(self):
-        s_index = 0
-        v_index = 0
-        while s_index < len(self.session_list) and v_index < len(self.velocities):
-            session = self.session_list[s_index]
-            while v_index < len(self.velocities)-1 and \
-                  self.velocities[v_index][0] < session.start:
-                v_index += 1
-            session.min_V = self.velocities[v_index-1][2]
-            session.max_V = self.velocities[v_index-1][1]
-          
-            if self.velocities[v_index][0] < session.end:
-                del self.session_list[s_index]
-                self.session_list.insert(s_index, Session(self.velocities[v_index][0]+1,\
-                                    session.end,session.min_V,session.max_V))
-                self.session_list.insert(s_index, Session(session.start,\
-                                    self.velocities[v_index][0]-1,session.min_V,session.max_V))
-
-                s_index -=1
-                v_index -=1
-                
-            s_index+=1
-
-    def group_particles(self):
-        self.session_list = []
-
-        v_index = 0
-        p_index = 1
-        time = self.velocities[0][0]
-        while self.particles[p_index][0] < time: p_index+=1
-        session_start = self.particles[p_index][0]
-        p_index +=1
-        while p_index < len(self.particles):
-
-            prev = self.particles[p_index-1][0]
-            time = self.particles[p_index][0]
-            if (time-prev > gap_size):
-                session_end = prev
-                self.session_list.append(Session(session_start-1,session_end+1,-1,-1))
-                session_start = time
-            p_index+=1
-                            
-        
-
+    # pull_data takes the login credentials for the database and populates the important input fields of 
+    # the rate analyzer class.
+    # The data is retrieved as a list of tuples, such as (integer, float, float, integer) in the case of one
+    # particle
     def pull_data(self,hostname, usr, password, db):
+
+        #Debugging timer
         start_time = time.time()
 
+        #Server connection
         mydb = mysql.connector.connect(host=hostname, user=usr,\
             passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
 
+        #Fetch all the velocity parameter changes, with the timestamp, min, and max
         cursor.execute("select integer_timestamp, velocity_max, \
         velocity_min from psu order by integer_timestamp ASC")
         self.velocities = cursor.fetchall()
 
+        #Fetch a table of the source setting frequencies, along with the current and next timestamp
+        # This allows us to consider the time between a frequency = 0 and the next timestamp dead time
         cursor.execute("SELECT integer_timestamp,LEAD(integer_timestamp) over \
             (order by integer_timestamp) as next,frequency FROM ccldas_production.source_settings\
-                 where frequency = 0 order by integer_timestamp asc")
+                  order by integer_timestamp asc")
         frequencies = cursor.fetchall()
+        #frequency_gaps stores the multiple gaps in the active timeline
         self.frequency_gaps = []
         for i in range(len(frequencies)-1):
             f = frequencies[i]
             if f[2]==0: 
                 self.frequency_gaps.append(f)
-                self.frequency_gaps.append(frequencies[i+1])
+                #self.frequency_gaps.append(frequencies[i+1])
 
+
+        #Fetch all the experiment changes with their timestamps
         cursor.execute("SELECT integer_timestamp,id_experiment_settings,id_groups\
         FROM ccldas_production.experiment_settings")
         self.experiments = cursor.fetchall()
 
-        cursor.execute("SELECT id_dust_type,dust_name \
-        FROM ccldas_production.dust_type")
-        dust_type = cursor.fetchall()
-
+        #The dust event captures an id_dust_info, which references a dust type, which references a dust materials
+        #two maps/dictionaries were used to keep this mapping
         cursor.execute("SELECT id_dust_info,dust_type \
         FROM ccldas_production.dust_info")
         dust_info = cursor.fetchall()
+
+        cursor.execute("SELECT id_dust_type,dust_name \
+        FROM ccldas_production.dust_type")
+        dust_type = cursor.fetchall()
 
         self.info_to_type = {}
         for d in dust_info:
@@ -334,14 +176,19 @@ class Rate_analyzer:
             self.type_to_name[d[0]] = d[1]   
 
 
+        #Retrieving all the dust events is rather time-consuming, so a local csv is stored and updated
+        # each time this program is run. 
         self.particles = []
         try:
+            #If the the file exists
             with open('particles.csv', 'r') as particle_file:
                 print("Fetching particles locally",flush= True)
+                #read it into memory
                 for line in particle_file:
                     vals = line.split(",")
                     part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
                     self.particles.append(part)
+                # retrive any new particles from the database afte the last known timestamp
                 query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
                 FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
                 AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
@@ -349,21 +196,200 @@ class Rate_analyzer:
                 for particle in cursor.fetchall():
                     self.particles.append(particle)
 
+        #If the file does not exist
         except FileNotFoundError:
             print("Fetching particles by web",flush= True)
+            #pull all the data from the database
             query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
             FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
             AND velocity >= 0) ORDER BY integer_timestamp ASC"
             cursor.execute(query)
             self.particles = cursor.fetchall()
-            particle_file = open("particles.csv","w")
-            for particle in self.particles:
-                particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
-            particle_file.close()
+        
+        #Write the data to the file in csv format
+        particle_file = open("particles.csv","w")
+        for particle in self.particles:
+            particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
+        particle_file.close()
         print("All data fetched. Time: %.2f seconds" %(time.time()-start_time))
 
 
+    #The timeline of dust events is split into groups based on a given gap size
+    # The object fields used are particles[], velocities[] and this method creates and
+    # uses session_list[]
+    def group_particles(self):
+        self.session_list = []
 
+        particle_index = 1
+        current_timestamp = self.velocities[0][0]
+
+        #No sessions before the first recorded velocity parameters
+        while self.particles[particle_index][0] < current_timestamp: particle_index+=1
+
+        #Defining a session start
+        session_start = self.particles[particle_index][0]
+        particle_index +=1
+
+        
+        while particle_index < len(self.particles):
+
+            prev_timestamp = self.particles[particle_index-1][0]
+            current_timestamp = self.particles[particle_index][0]
+            #If the gap is larger than the constant gap size
+            if (current_timestamp-prev_timestamp > gap_size):
+                #make a new session
+                session_end = prev_timestamp
+                self.session_list.append(Session(session_start-1,session_end+1,-1,-1))
+                session_start = current_timestamp
+
+            particle_index+=1
+
+
+    # frequency_segment makes use of the frequency gaps list pulled from the database. It uses two parallelly incrementing
+    # indices to step through both the session list and the frequency gaps list in linear time. 
+    # a frequency gap is where there is a period of time where the pelletron frequency is 0
+    # When there is a frequency gap that appears in the session, the session is split around that gap. 
+    def frequency_segment(self):
+        frequency_index =0
+        sesssion_index =0
+
+        #For each session
+        while sesssion_index < len(self.session_list):
+            session = self.session_list[sesssion_index]
+
+            #Check the first frequency gap after the start of the session (it will likely be after the end of 
+            # the session)
+            while frequency_index< len(self.frequency_gaps)-2 and\
+                 self.frequency_gaps[frequency_index][0] < session.start:
+                frequency_index+=1
+
+            # if the gap is contained within the session,
+            if frequency_index< len(self.frequency_gaps)-2 and self.frequency_gaps[frequency_index][1] <= session.end :
+                #delete the session and replace it with two others, split around the gap
+                del self.session_list[sesssion_index]
+                self.session_list.insert(sesssion_index, Session(self.frequency_gaps[frequency_index][1]+1,\
+                                    session.end,session.min_V,session.max_V))
+                self.session_list.insert(sesssion_index, Session(session.start,\
+                                    self.frequency_gaps[frequency_index][0]-1,session.min_V,session.max_V))
+                #back up to clean up
+                frequency_index -=2
+                sesssion_index -=2
+
+            sesssion_index+=1
+
+    
+    # velocity_tag_segment and experiment_tag_segment work in nearly identical ways as frequency segment
+    # and exactly the same way as each. I elected to keep them as separate methods as they differ slightly
+    # and the consolidation of these methods would make it harder to read
+
+    # velocity_tag_segment splits the sessions into two if a velocity parameter change occurs in the middle of a 
+    # session, and tags the sessions with the appropriate velocity. 
+    def velocity_tag_segment(self):
+        session_index = 0
+        velocity_index = 0
+        #for all in the list bounds
+        while session_index < len(self.session_list) and velocity_index < len(self.velocities):
+            session = self.session_list[session_index]
+
+            #take the first velocity change after the start of the session
+            while velocity_index < len(self.velocities)-1 and \
+                  self.velocities[velocity_index][0] < session.start:
+                velocity_index += 1
+            
+            #The correct velocity parameters are the ones set prior to the first velocity change
+            # after session start, so velocity_index-1
+            session.min_V = self.velocities[velocity_index-1][2]
+            session.max_V = self.velocities[velocity_index-1][1]
+          
+            #If the velocity change happens during the session
+            if self.velocities[velocity_index][0] < session.end:
+                #replace the session with two split around it
+                del self.session_list[session_index]
+                self.session_list.insert(session_index, Session(self.velocities[velocity_index][0]+1,\
+                                    session.end,session.min_V,session.max_V))
+                self.session_list.insert(session_index, Session(session.start,\
+                                    self.velocities[velocity_index][0]-1,session.min_V,session.max_V))
+
+                session_index -=1
+                velocity_index -=1
+
+            session_index+=1
+  
+    # experiment_tag_segment splits the sessions into two if an experiment change occurs in the middle of a 
+    # session, and tags the sessions with the appropriate experiment ID. 
+    def experiment_tag_segment(self):
+        session_index = 0
+        exp_id_index = 0
+
+        #See above methods for identical program structure and flow
+        while session_index < len(self.session_list) and exp_id_index < len(self.experiments):
+            session = self.session_list[session_index]
+            while exp_id_index < len(self.experiments)-1 and \
+                self.experiments[exp_id_index][0] < session.start:
+                exp_id_index += 1
+
+            session.experimentID = self.experiments[exp_id_index-1][1]
+
+            
+            #Split and replace
+            if self.experiments[exp_id_index][0] < session.end:
+                del self.session_list[session_index]
+                self.session_list.insert(session_index, Session(self.experiments[exp_id_index][0]+1,\
+                                    session.end,session.min_V,session.max_V))
+                self.session_list.insert(session_index, Session(session.start,\
+                                    self.experiments[exp_id_index][0]-1,session.min_V,session.max_V))
+                exp_id_index-=1
+                session_index -=1
+                
+            session_index+=1
+        
+
+    #Particle_tag takes the current sessions, and places the dust events in the sessions they should be in
+    # It again uses the parallel indices strategy
+    def particle_tag(self):
+
+        self.empty_sessions = []
+        self.valid_sessions = []
+        particle_index =0
+
+
+        for session in self.session_list:
+            while self.particles[particle_index][0] < session.start:
+                particle_index+=1
+            #If the first particle after the start of the session is before the end (aka in the session)
+            if self.particles[particle_index][0] <= session.end:
+                #Give it a dust ID from dust type
+                session.dustID = self.info_to_type[self.particles[particle_index][1]]
+                session.material = self.type_to_name[session.dustID]
+                self.valid_sessions.append(session)
+            
+            #Cases of empty sessions
+            else: self.empty_sessions.append(session)
+            
+            #Add all the particles within the session to the session's particle list
+            while self.particles[particle_index][0] <= session.end:
+                session.p_list.append(self.particles[particle_index])
+                particle_index+=1
+
+            #Assign qualities to the sessions 
+            if session.experimentID == maintenance_id: session.quality = maintenance_quality
+
+            if session.quality>low_count_quality and len(session.p_list) < low_count_quality_count :
+                session.quality = low_count_quality
+
+            if session.quality > low_time_quality and session.duration < low_time_quality_time:
+                session.quality = low_time_quality
+
+            if session.quality >= default_quality and len(session.p_list) < high_count_quality_count:
+                session.quality = default_quality
+
+    #Use the pickle library to write the finalized list of sessions to temp_data.pkl
+    def write_data(self):
+        with open("temp_data.pkl","wb") as save_file:
+            pickle.dump(self.valid_sessions,save_file)
+        
+
+#Call the rate analyzer with the given login credentials
 a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
 #a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 
