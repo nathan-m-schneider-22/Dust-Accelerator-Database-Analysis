@@ -164,8 +164,8 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
         #Send this output back to the labview program
         print("%.3f |" %(sum (rate for rate in rates)),end = "")
         print("%.3f particles per hour" %(sum (rate for rate in rates)))
-        print("Total particles : ",sum(particle_count_bins))
-        print("Total time: %d sessions for %.2f hours" %\
+        print("%d Total particles" %(sum(particle_count_bins)))
+        print("%d Total sessions\n%.2f Hours total runtime" %\
             (len(used_sessions), session_time_sum/60/60/1000))
     
     #More stderr debug info
@@ -244,7 +244,7 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     #Runtime bins
     plt.figure()
     v_bins = [s/1000/60/60 for s in v_bins]
-    plt.plot([i/10 for i in range(accelerator_velocity_range*10)],v_bins)
+    plt.bar([i/10 for i in range(accelerator_velocity_range*10)], v_bins)
     plt.title("Run time total for each velocity bin")
     plt.xlabel("Velocity range bins")
     plt.ylabel("Total active time (hours)")
@@ -264,7 +264,7 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     
     #Rate bins
     plt.figure()
-    plt.plot([i/10 for i in range(accelerator_velocity_range*10)],rates)
+    plt.bar([i/10 for i in range(accelerator_velocity_range*10)],rates)
     plt.title("Rates of dust detection")
     plt.yscale("log")
     plt.xlabel("Velocity range bins")
