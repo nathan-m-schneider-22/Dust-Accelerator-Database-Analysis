@@ -11,3 +11,5 @@ Test*
 *.txt
 get-pip.py
 
+results_interface/
+results_interface.exe/

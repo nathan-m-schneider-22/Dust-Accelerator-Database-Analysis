@@ -85,7 +85,7 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
     def __init__(self,hostname, user, password, database):
-
+        start_time = time.time()
 
         #Pulls the data from local files and the SQL server
         self.pull_data(hostname,user, password, database)
@@ -115,9 +115,14 @@ class Rate_analyzer:
         print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60))
         print("Total sessions: ",len(self.session_list))
         print("Valid: %d Empty: %d" %(len(self.valid_sessions),len(self.empty_sessions)))
-        print("Valid time: %d Empty time: %d" %(sum(s.duration for s in self.valid_sessions),\
-            sum(s.duration for s in self.empty_sessions)))
+        print("Valid time: %.2f Empty time: %.2f" %(sum(s.duration for s in self.valid_sessions)/1000/60/60,\
+            sum(s.duration for s in self.empty_sessions)/1000/60/60))
         print("Total Particles: %d" %(sum(len(s.particle_list) for s in self.valid_sessions)))
+        print("Time to calculate: %.2fs" %(time.time()-start_time))
+
+
+
+
 
     # pull_data takes the login credentials for the database and populates the important input fields of 
     # the rate analyzer class.
@@ -179,6 +184,7 @@ class Rate_analyzer:
         #Retrieving all the dust events is rather time-consuming, so a local csv is stored and updated
         # each time this program is run. 
         self.particles = []
+        print()
         try:
             #If the the file exists
             with open('particles.csv', 'r') as particle_file:

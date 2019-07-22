@@ -64,8 +64,10 @@ def main():
             dustID = str(input_list[2])
             vmin,vmax = float(input_list[3]),float(input_list[4])
             material = str(input_list[5])
-            pq_min,pq_max = int(input_list[6]),int(input_list[7])
-            sq_min ,sq_max= int(input_list[8]),int(input_list[9])
+            pq_min = min(int(input_list[6]),int(input_list[7]))
+            pq_max = max(int(input_list[6]),int(input_list[7]))
+            sq_min = min(int(input_list[8]),int(input_list[9]))
+            sq_max = max(int(input_list[8]),int(input_list[9]))
             experiment_id_string = str(input_list[10])
 
             print("Time to read data: %.2f seconds" %(time.time() -st),file = sys.stderr)
@@ -234,7 +236,7 @@ def generate_results_graphs(session_list):
                 break
     plt.bar(labels,counts)
     plt.title("Session Detection Counts")
-    plt.xlabel("Number of dust events in a session within parameters",fontsize = 14)
+    plt.xlabel("Number of dust events per session within parameters",fontsize = 14)
     plt.ylabel("Number of sessions",fontsize = 14)
     plt.savefig("results_sessions_particle_counts.png")
 
