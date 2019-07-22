@@ -9,4 +9,4 @@ matplotlib/
 Test*
 *.pkl
 *.txt
-get-pip.py
+get-pip.pyProduction/
