@@ -42,12 +42,13 @@ class Session:
         self.quality = 5
 
     def __str__(self):
-        return "Session from %s to %s \nDuration: %.1f min material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
-ExperimentID: %s particles: %d Quality: %d\n------------------------------------------\
+        return "Session from %s to %s \nDuration: %.1f min Material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
+ExperimentID: %s # of particles: %d Session Quality: %d Avg dust quality: %.2f\n------------------------------------------\
 " %(datetime.fromtimestamp(self.start/1000).strftime("%c"),\
             datetime.fromtimestamp(self.end/1000).strftime("%c"),\
             self.duration/1000/60,self.material,self.min_V,self.max_V,self.start,self.end,\
-            self.dustID,self.experimentID,len(self.particle_list),self.quality)
+            self.dustID,self.experimentID,len(self.particle_list),self.quality,\
+                sum(p[3] for p in self.particle_list)/(len(self.particle_list)+1))
 
 
 def main():
@@ -80,6 +81,10 @@ def main():
             #Calculate the results based on the arguments
             calculate_results(pq_min,pq_max,sq_min,sq_max,start, stop, dust_ID_set, vmin ,\
                 vmax, material,session_list,dustID,experiment_ID_set,experiment_id_string)
+
+
+
+
     except FileNotFoundError:
         print("temp_data.pkl not found, please run generate_sessions.py",file=sys.stderr)
 
@@ -172,17 +177,18 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     
     #More stderr debug info
     print("Time to calculate results: %.2f seconds" %(time.time() -st),file = sys.stderr)
-    st = time.time()
     
     #Graphs for display on the insights tab of the labview vi are generated here
     generate_results_graphs(used_sessions)
     generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates)
 
-    print("Time to generate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
 
 
 #Generate the graphs of the session breakdown
 def generate_results_graphs(session_list):
+
+    st = time.time()
+
     plt.figure()
 
     #Graph of the session qualites used in the results
@@ -212,9 +218,9 @@ def generate_results_graphs(session_list):
     bins=[0,5,15,30,60,120,3000000]
     labels = ["0-5","5-15","15-30","30-60","60-120","Over 120"]
     counts = [0]*(len(bins)-1)
-    for time in durations:
+    for runtime in durations:
         for i in range(len(bins)-1):
-            if bins[i] <= time < bins[i+1]: 
+            if bins[i] <= runtime < bins[i+1]: 
                 counts[i]+=1
                 break
     plt.bar(labels,counts)
@@ -240,8 +246,12 @@ def generate_results_graphs(session_list):
     plt.ylabel("Number of sessions",fontsize = 14)
     plt.savefig("results_sessions_particle_counts.png")
 
+
+    print("Time to rate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
+
 #Generate graphs of the histogram bins
 def generate_bins_graphs(session_list,v_bins,p_bins,rates):
+    st = time.time()
 
     #Runtime bins
     plt.figure()
@@ -273,6 +283,10 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     plt.ylabel("Rate of detection (particles/hour)")
     plt.savefig("results_rates.png")
 
+    print("Time to rate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
+
+    for session in session_list:
+        print(session,file = sys.stderr)
 #Make a set out of a string like 1-4,5,11,13-19
 def make_ID_set(string_list):
     #Make an empty set
