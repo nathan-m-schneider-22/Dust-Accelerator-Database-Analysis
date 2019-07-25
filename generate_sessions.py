@@ -69,6 +69,7 @@ class Session:
         self.max_V = maxV
         self.particle_list = []
         self.quality = 5
+        self.performance_factor = 1
 
     #Debugging to_string method
     def __str__(self):

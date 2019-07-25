@@ -9,4 +9,6 @@ matplotlib/
 Test*
 *.pkl
 *.txt
-get-pip.pyProduction/
+get-pip.py
+Production/
+comparison.sh

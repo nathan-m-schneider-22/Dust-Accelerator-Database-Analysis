@@ -19,11 +19,16 @@ import sys
 from datetime import datetime
 import time
 import matplotlib.pyplot as plt
+import math
+import statistics
+
 
 #The accelerator range and bin size determines the number of bins
 accelerator_velocity_range = 100
 bin_size = .1
 
+
+outlier_percentage = 10
 
 #The session class structure must be included, as the list of 
 # sessions from generate_sessions.py is to be directly loaded
@@ -40,6 +45,7 @@ class Session:
         self.max_V = maxV
         self.particle_list = []
         self.quality = 5
+        self.performance_factor = 0
 
     def __str__(self):
         return "Session from %s to %s \nDuration: %.1f min Material: %s, %.1f-%.1fkm/s %d %d\nDustID: %s \
@@ -95,7 +101,7 @@ def main():
 # particles in that range can be calculated. As such, the rate of that small range can be calculated.
 # To get a larger range, simply sum the rates of smaller spans. 
 def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min , \
-    v_max, material,session_list,dust_ID_string,experiment_ID_set,experiment_id_string):     
+    v_max, material,session_list,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics = True):     
     st = time.time()
 
     #Debugging statment to show the arrival of correct arguments
@@ -107,12 +113,13 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     #To track the sessions that match the given parameters
     used_sessions = []
 
-    
+    session_to_rate_bins  = {}
+
     #Initialize the bins
     runtime_bins = [0]*int(accelerator_velocity_range/bin_size)
     particle_count_bins = [0]*int(accelerator_velocity_range/bin_size)
     rates = [0]*int(accelerator_velocity_range/bin_size)
-
+    optimal_bins = [ [] for i in range(int(accelerator_velocity_range/bin_size))]
     #To track the total duration of the sessions
     session_time_sum =0
 
@@ -135,12 +142,14 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
                         #Then add to used sessions, and initialize a list to replace the session's particle list
                         used_sessions.append(session)
                         used_particles = []
+                        session_to_rate_bins[session] = [0]*int(accelerator_velocity_range/bin_size)
 
                         #Add the session duration to all the bins within the velocity range
                         for i in range(int(accelerator_velocity_range/bin_size)):
                             if session.min_V < (i+1)*bin_size and session.max_V > (i)*bin_size and\
                                 v_min<(i+1)*bin_size and v_max >= (i)*bin_size:
                                 runtime_bins[i] += session.duration
+                                optimal_bins[i].append(session)
 
                         #Add the duration to the total time spent
                         session_time_sum += session.duration
@@ -152,9 +161,12 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
                                 velocity = particle[2]/1000
                                 if velocity >= v_min and velocity < v_max:
                                     #Add it to the correct histogram bin
+                                    session_to_rate_bins[session][int(velocity/bin_size)] += 1
                                     particle_count_bins[ int(velocity/bin_size)]+=1
                                     used_particles.append(particle)
-
+                        for i in range(int(accelerator_velocity_range/bin_size)):
+                            session_to_rate_bins[session][i]/=session.duration
+                        
                         #replace the session's list of particles with the particles within the arguments
                         session.particle_list = used_particles
 
@@ -165,24 +177,122 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     
     #If there are no particles matching those arguments, the total sum rate will be 0
     if sum (rate for rate in rates) ==0:
-        print("0|")
-        print("No particles found within those parameters")
-    else:
-        #Send this output back to the labview program
-        print("%.3f |" %(sum (rate for rate in rates)),end = "")
-        print("%.3f particles per hour" %(sum (rate for rate in rates)))
-        print("%d Total particles" %(sum(particle_count_bins)))
-        print("%d Total sessions\n%.2f Hours total runtime" %\
-            (len(used_sessions), session_time_sum/60/60/1000))
+        print("No data found",end = "|")
+    #Send this output back to the labview program
+    else: print("%.3f |" %(sum (rate for rate in rates)),end = "")
+    # print("%.3f particles per hour" %(sum (rate for rate in rates)))
+    # print("%d Total particles" %(sum(particle_count_bins)))
+    print("%d Total sessions %.2f Hours total runtime" %\
+        (len(used_sessions), session_time_sum/60/60/1000))
     
     #More stderr debug info
     print("Time to calculate results: %.2f seconds" %(time.time() -st),file = sys.stderr)
-    
+
+
     #Graphs for display on the insights tab of the labview vi are generated here
-    generate_results_graphs(used_sessions)
-    generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates)
+    if generate_graphics:
+        generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates)
+        generate_results_graphs(used_sessions)
+
+        winners,losers = find_optimum_rates(used_sessions,session_to_rate_bins,rates)
+        calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
+            winners,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics=False)
+        calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
+            losers,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics=False)
+
+        check_connection(rates,used_sessions)
+
+def find_optimum_rates(session_list,session_to_rate_bins,rates):
+        upper_session_list,low_session_list = [],[]
+
+        for session in session_list:
+            performance_total = []
+            
+            for i in range(int(session.min_V/bin_size),min(int(session.max_V/bin_size),int(accelerator_velocity_range/bin_size))):
+                if rates[i]!=0:
+                    expected_bin_rate =  session_to_rate_bins[session][i]*1000*60*60
+                    performance_total.append(expected_bin_rate/rates[i])
+            if len(performance_total)>0: session.performance_factor = statistics.median(performance_total)
+        
+        winners = []
+        for session in session_list:
+            if  session.performance_factor !=0:
+                if session.performance_factor < 1 and session.performance_factor!=0:
+                    session.performance_factor = -1/session.performance_factor
+            if session.performance_factor > 1.2 : upper_session_list.append(session)
+            if session.performance_factor < 0 : low_session_list.append(session)
 
 
+            winners.append(session.performance_factor)
+
+        winners = [s.performance_factor for s in session_list if s.performance_factor != 0]
+        
+        plt.figure(figsize=(7,5))
+        plt.title("Distribution of sessions by factor of performance compared to mean")
+        plt.xlabel("Factor of performance compared to mean")
+        plt.ylabel("Number of sessions")
+        plt.hist(winners,histtype ="bar",bins = 100,stacked=True,range = (-10,10),label=(">20 min","<20 min"))
+        plt.savefig("session_performance_distribution")
+
+
+        return upper_session_list,low_session_list
+
+
+def check_connection(rates, session_list):
+    plt.close("all")
+
+    plt.figure()
+    plt.title("Session performance factor variance over minimum selected velocity")
+    plt.xlabel("Minimum session velocity")
+    plt.ylabel("Session performance factor (winner-ness)")
+    mv = [ s.min_V for s in session_list if abs(s.performance_factor <100)]
+    pf = [ s.performance_factor for s in session_list if abs(s.performance_factor <100)]
+
+    plt.scatter(mv,pf)
+
+    plt.show(block = False)
+    plt.figure()
+    mv_map = {}
+    for v in mv: mv_map[v] = []
+    plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
+    plt.xlabel("Minimum session velocity")
+    plt.ylabel("Session performance factor (winner-ness)")
+    for session in session_list:
+        mv_map[session.min_V].append(session.performance_factor)
+    
+    min_vs = mv_map.keys()
+    mvs = []
+    pfs = []
+    for key in min_vs:
+        if statistics.median(mv_map[key])<10: 
+            pfs.append(statistics.median(mv_map[key]))
+            mvs.append(key)
+    plt.scatter(mvs,pfs)
+    plt.show()
+
+def get_outliers(session_list,session_to_rate_map,velocity_index,number_of_outliers,low_outliers = False):
+
+    outliers = []
+    for i in range(number_of_outliers):
+        max_key = None
+        if low_outliers:
+            max_val = math.inf
+            for session in session_list:
+                if  session_to_rate_map[session][velocity_index] <= max_val:
+                    max_val = session_to_rate_map[session][velocity_index]
+                    max_key = session
+        else:
+            max_val = -1
+            for session in session_list:
+                if  session_to_rate_map[session][velocity_index] >= max_val:
+                    max_val = session_to_rate_map[session][velocity_index]
+                    max_key = session
+        outliers.append(max_key)
+        session_list.remove(max_key)
+    return outliers
+
+            
+            
 
 #Generate the graphs of the session breakdown
 def generate_results_graphs(session_list):
@@ -213,6 +323,7 @@ def generate_results_graphs(session_list):
     plt.savefig("results_particles_qualities.png")
 
     #Graph of the duration breakdown
+
     plt.figure()
     durations = [s.duration/1000/60 for s in session_list]
     bins=[0,5,15,30,60,120,3000000]
@@ -228,6 +339,7 @@ def generate_results_graphs(session_list):
     plt.xlabel("Session duration in minutes",fontsize = 14)
     plt.ylabel("Number of sessions",fontsize = 14)
     plt.savefig("results_sessions_durations.png")
+
 
     #Graph of the particle count breakdown
     plt.figure()
@@ -247,12 +359,13 @@ def generate_results_graphs(session_list):
     plt.savefig("results_sessions_particle_counts.png")
 
 
-    print("Time to rate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
+    print("Time to breakdown graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
 
 #Generate graphs of the histogram bins
 def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     st = time.time()
 
+    #2.24
     #Runtime bins
     plt.figure()
     v_bins = [s/1000/60/60 for s in v_bins]
@@ -262,6 +375,8 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     plt.ylabel("Total active time (hours)")
     plt.savefig("results_runtime.png")
 
+
+    #1.4
     #Particle count bins
     plt.figure()
     particles = []
@@ -273,7 +388,8 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     plt.xlabel("Velocity range bins")
     plt.ylabel("Total particles in bin")
     plt.savefig("results_particle_count.png")
-    
+
+    #3.0
     #Rate bins
     plt.figure()
     plt.bar([i/10 for i in range(accelerator_velocity_range*10)],rates)
@@ -285,8 +401,9 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
 
     print("Time to rate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
 
-    for session in session_list:
-        print(session,file = sys.stderr)
+    # for session in session_list:
+    #     print(session,file = sys.stderr)
+
 #Make a set out of a string like 1-4,5,11,13-19
 def make_ID_set(string_list):
     #Make an empty set
