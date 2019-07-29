@@ -12,3 +12,4 @@ Test*
 get-pip.py
 Production/
 comparison.sh
+*.xlsx

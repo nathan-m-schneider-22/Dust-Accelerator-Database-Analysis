@@ -21,7 +21,7 @@ import time
 import matplotlib.pyplot as plt
 import math
 import statistics
-
+import numpy as np
 
 #The accelerator range and bin size determines the number of bins
 accelerator_velocity_range = 100
@@ -84,11 +84,16 @@ def main():
             dust_ID_set = make_ID_set(dustID)
             experiment_ID_set = make_ID_set(experiment_id_string)
 
+
+            
+
+
+
             #Calculate the results based on the arguments
             calculate_results(pq_min,pq_max,sq_min,sq_max,start, stop, dust_ID_set, vmin ,\
                 vmax, material,session_list,dustID,experiment_ID_set,experiment_id_string)
 
-
+            
 
 
     except FileNotFoundError:
@@ -108,7 +113,7 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     print("For Material: %s, Time %s-%s DustID: %s ExperimentID: %s Velocity %.2f-%.2f" %\
     (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
         datetime.fromtimestamp(end/1000).strftime("%c"),dust_ID_string, \
-            experiment_id_string,v_min,v_max),file = sys.stderr)
+            experiment_id_string,v_min,v_max),file = sys.stdout)
 
     #To track the sessions that match the given parameters
     used_sessions = []
@@ -201,6 +206,7 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
             losers,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics=False)
 
         check_connection(rates,used_sessions)
+    return sum(rates)
 
 def find_optimum_rates(session_list,session_to_rate_bins,rates):
         upper_session_list,low_session_list = [],[]
@@ -212,15 +218,20 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
                 if rates[i]!=0:
                     expected_bin_rate =  session_to_rate_bins[session][i]*1000*60*60
                     performance_total.append(expected_bin_rate/rates[i])
-            if len(performance_total)>0: session.performance_factor = statistics.median(performance_total)
-        
-        winners = []
+            #if len(performance_total)>0: session.performance_factor = statistics.median(performance_total)
+            if len(performance_total)>0: session.performance_factor = statistics.mean(performance_total)
         for session in session_list:
             if  session.performance_factor !=0:
                 if session.performance_factor < 1 and session.performance_factor!=0:
                     session.performance_factor = -1/session.performance_factor
-            if session.performance_factor > 1.2 : upper_session_list.append(session)
-            if session.performance_factor < 0 : low_session_list.append(session)
+        winners = [session.performance_factor for session in session_list]
+        winners.sort()
+        upper_quarter_val = winners[ int(len(winners)*.75)]
+        lower_quarter_val = winners[ int(len(winners)*.25)]
+
+        for session in session_list:
+            if session.performance_factor > upper_quarter_val : upper_session_list.append(session)
+            if session.performance_factor < lower_quarter_val : low_session_list.append(session)
 
 
             winners.append(session.performance_factor)
@@ -245,51 +256,34 @@ def check_connection(rates, session_list):
     plt.title("Session performance factor variance over minimum selected velocity")
     plt.xlabel("Minimum session velocity")
     plt.ylabel("Session performance factor (winner-ness)")
-    mv = [ s.min_V for s in session_list if abs(s.performance_factor <100)]
-    pf = [ s.performance_factor for s in session_list if abs(s.performance_factor <100)]
+    mv = [ s.min_V for s in session_list if abs(s.performance_factor) <30]
+    pf = [ s.performance_factor for s in session_list if abs(s.performance_factor) <30]
 
     plt.scatter(mv,pf)
+    plt.plot(np.unique(mv), np.poly1d(np.polyfit(mv, pf, 1))(np.unique(mv)))
+    plt.savefig("Throttle_graph.png")
+    # plt.show(block = False)
 
-    plt.show(block = False)
     plt.figure()
-    mv_map = {}
-    for v in mv: mv_map[v] = []
-    plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
-    plt.xlabel("Minimum session velocity")
-    plt.ylabel("Session performance factor (winner-ness)")
-    for session in session_list:
-        mv_map[session.min_V].append(session.performance_factor)
+    # mv_map = {}
+    # for v in mv: mv_map[v] = []
+    # plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
+    # plt.xlabel("Minimum session velocity")
+    # plt.ylabel("Session performance factor (winner-ness)")
+    # for session in session_list:
+    #     if session.min_V in mv_map: mv_map[session.min_V].append(session.performance_factor)
     
-    min_vs = mv_map.keys()
-    mvs = []
-    pfs = []
-    for key in min_vs:
-        if statistics.median(mv_map[key])<10: 
-            pfs.append(statistics.median(mv_map[key]))
-            mvs.append(key)
-    plt.scatter(mvs,pfs)
-    plt.show()
-
-def get_outliers(session_list,session_to_rate_map,velocity_index,number_of_outliers,low_outliers = False):
-
-    outliers = []
-    for i in range(number_of_outliers):
-        max_key = None
-        if low_outliers:
-            max_val = math.inf
-            for session in session_list:
-                if  session_to_rate_map[session][velocity_index] <= max_val:
-                    max_val = session_to_rate_map[session][velocity_index]
-                    max_key = session
-        else:
-            max_val = -1
-            for session in session_list:
-                if  session_to_rate_map[session][velocity_index] >= max_val:
-                    max_val = session_to_rate_map[session][velocity_index]
-                    max_key = session
-        outliers.append(max_key)
-        session_list.remove(max_key)
-    return outliers
+    # min_vs = mv_map.keys()
+    # mvs = []
+    # pfs = []
+    # # print(len(session_list))
+    # # print(sum(1 for s in session_list if s.performance_factor==0))
+    # for key in min_vs:
+    #     if statistics.median(mv_map[key])<10 and len(mv_map[key])>10:
+    #         pfs.append(statistics.median(mv_map[key]))
+    #         mvs.append(key)
+    # plt.scatter(mvs,pfs)
+    # # plt.show()
 
             
             
