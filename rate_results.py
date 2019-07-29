@@ -113,7 +113,7 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     print("For Material: %s, Time %s-%s DustID: %s ExperimentID: %s Velocity %.2f-%.2f" %\
     (material, datetime.fromtimestamp(start/1000).strftime("%c"), \
         datetime.fromtimestamp(end/1000).strftime("%c"),dust_ID_string, \
-            experiment_id_string,v_min,v_max),file = sys.stdout)
+            experiment_id_string,v_min,v_max),file = sys.stderr)
 
     #To track the sessions that match the given parameters
     used_sessions = []
@@ -245,7 +245,26 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
         plt.hist(winners,histtype ="bar",bins = 100,stacked=True,range = (-10,10),label=(">20 min","<20 min"))
         plt.savefig("session_performance_distribution")
 
+        plt.close("all")
+        plt.subplot(121)
+        plt.xlabel("Factor of decrease compared to average rates")
+        plt.ylabel("Number of sessions of this factor")
+        plt.xlim(10,0)
+        plt.title("Worse than average sessions")
 
+        plt.hist([w*-1 for w in winners if w<0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
+
+        plt.subplot(122)
+        plt.xlabel("Factor of increase compared to average rates")
+        plt.ylabel("Number of sessions of this factor")
+        plt.hist([w for w in winners if w>0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
+        plt.title("Better than average sessions")
+
+        fig = plt.gcf()
+        fig.set_size_inches(15, 8)
+
+        plt.savefig("double_performance_distribution.png")
+        plt.show()
         return upper_session_list,low_session_list
 
 
