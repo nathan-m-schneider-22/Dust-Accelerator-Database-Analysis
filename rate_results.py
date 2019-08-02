@@ -229,7 +229,7 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
                     session.performance_factor = -1/session.performance_factor
         winners = [session.performance_factor for session in session_list]
         winners.sort()
-        print(len(winners))
+        
         optimal_lower_bound = winners[ int(len(winners)*.6)]
         optimal_upper_bound = winners[ int(len(winners)*.9)]
         
