@@ -11,4 +11,4 @@ echo done
 python .\generate_sessions.py
 type .\example_input.txt | python .\rate_results.py
 
-Echo Setup Complete
+Echo Setup Complete 

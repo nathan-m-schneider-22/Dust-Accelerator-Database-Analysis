@@ -26,6 +26,7 @@ import tkinter
 import matplotlib.pyplot as plt
 import pickle
 import time
+import sys
 
 
 #The gap size referes to the segmentation of the dust event timeline into groups where the spacing between two events
@@ -69,6 +70,7 @@ class Session:
         self.max_V = maxV
         self.particle_list = []
         self.quality = 5
+        self.performance_factor = 1
 
     #Debugging to_string method
     def __str__(self):
@@ -82,11 +84,11 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
-    def __init__(self,hostname, user, password, database):
+    def __init__(self,hostname, user, password, database,error_code):
         start_time = time.time()
 
         #Pulls the data from local files and the SQL server
-        self.pull_data(hostname,user, password, database)
+        self.pull_data(hostname,user, password, database,error_code)
 
         #Groups the particles by splitting them in groups where there are gaps
         self.group_particles()
@@ -126,7 +128,7 @@ class Rate_analyzer:
     # the rate analyzer class.
     # The data is retrieved as a list of tuples, such as (integer, float, float, integer) in the case of one
     # particle
-    def pull_data(self,hostname, usr, password, db):
+    def pull_data(self,hostname, usr, password, db,error_code):
 
         #Debugging timer
         start_time = time.time()
@@ -135,7 +137,7 @@ class Rate_analyzer:
         mydb = mysql.connector.connect(host=hostname, user=usr,\
             passwd=password,database=db,auth_plugin='mysql_native_password')
         cursor = mydb.cursor()
-
+        if error_code!= 25: exit(25)
         #Fetch all the velocity parameter changes, with the timestamp, min, and max
         cursor.execute("select integer_timestamp, velocity_max, \
         velocity_min from psu order by integer_timestamp ASC")
@@ -394,6 +396,12 @@ class Rate_analyzer:
         
 
 #Call the rate analyzer with the given login credentials
-a = Rate_analyzer("localhost","root","dust","ccldas_production")
 
-#a = Rate_analyzer("192.168.1.102","nathan","dust","ccldas_production") 
+command_line_args= sys.stdin.read().strip()
+
+if command_line_args=="":
+
+    a = Rate_analyzer("localhost","root","dust","ccldas_production")
+else:
+    argv = command_line_args.split("|")
+    a = Rate_analyzer(argv[0],argv[1],argv[2],"ccldas_production",int(argv[3]))

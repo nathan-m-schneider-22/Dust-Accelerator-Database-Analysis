@@ -69,7 +69,7 @@ def main():
             #initialize arguments
             start, stop = int(input_list[0]), int(input_list[1])
             dustID = str(input_list[2])
-            vmin,vmax = float(input_list[3]),float(input_list[4])
+            vmin,vmax = max(0,float(input_list[3])),min(accelerator_velocity_range,float(input_list[4]))
             material = str(input_list[5])
             pq_min = min(int(input_list[6]),int(input_list[7]))
             pq_max = max(int(input_list[6]),int(input_list[7]))
@@ -77,7 +77,7 @@ def main():
             sq_max = max(int(input_list[8]),int(input_list[9]))
             experiment_id_string = str(input_list[10])
 
-            print("Time to read data: %.2f seconds" %(time.time() -st),file = sys.stderr)
+
 
             #Both the dust ID and experiment ID come as a string representing a set, eg: 1-5,7,10-15, and
             # will be converted to a set
@@ -91,9 +91,9 @@ def main():
 
             #Calculate the results based on the arguments
             calculate_results(pq_min,pq_max,sq_min,sq_max,start, stop, dust_ID_set, vmin ,\
-                vmax, material,session_list,dustID,experiment_ID_set,experiment_id_string)
+                vmax, material,session_list,dustID,experiment_ID_set,experiment_id_string,"Average")
 
-            
+            print("Total runtime: ",time.time()-st,file = sys.stderr)
 
 
     except FileNotFoundError:
@@ -106,7 +106,8 @@ def main():
 # particles in that range can be calculated. As such, the rate of that small range can be calculated.
 # To get a larger range, simply sum the rates of smaller spans. 
 def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min , \
-    v_max, material,session_list,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics = True):     
+    v_max, material,session_list,dust_ID_string,experiment_ID_set,\
+        experiment_id_string,description_string,generate_graphics = True):     
     st = time.time()
 
     #Debugging statment to show the arrival of correct arguments
@@ -135,7 +136,7 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
             and session.start > start and session.end < end:
 
             #Within accepted dust ID
-            if (dust_ID_string == "" or dust_ID_string == "Any" or session.dustID in dust_ID_set):
+            if (dust_ID_string == "" or dust_ID_string == "Any," or session.dustID in dust_ID_set):
 
                 #Accepted Material
                 if (material == "" or material== "Any Material" or session.material == material):
@@ -187,23 +188,26 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     else: print("%.3f |" %(sum (rate for rate in rates)),end = "")
     # print("%.3f particles per hour" %(sum (rate for rate in rates)))
     # print("%d Total particles" %(sum(particle_count_bins)))
-    print("%d Total sessions %.2f Hours total runtime" %\
-        (len(used_sessions), session_time_sum/60/60/1000))
+    print("%s Results: %d Total sessions, %.2f Hours total runtime, %d experiments" %\
+        (description_string,len(used_sessions), session_time_sum/60/60/1000,\
+            len(set([s.experimentID for s in used_sessions]))))
     
     #More stderr debug info
-    print("Time to calculate results: %.2f seconds" %(time.time() -st),file = sys.stderr)
 
-
+    print("Time to calculate %s results %f" %(description_string,time.time()-st),file = sys.stderr)
+    generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates,v_min,v_max,description_string)
     #Graphs for display on the insights tab of the labview vi are generated here
     if generate_graphics:
-        generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates)
         generate_results_graphs(used_sessions)
 
+
+        st = time.time()
         winners,losers = find_optimum_rates(used_sessions,session_to_rate_bins,rates)
+        print("Time to find optimum ",time.time()-st,file = sys.stderr)
         calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
-            winners,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics=False)
+            winners,dust_ID_string,experiment_ID_set,experiment_id_string,"Optimal",generate_graphics=False)
         calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
-            losers,dust_ID_string,experiment_ID_set,experiment_id_string,generate_graphics=False)
+            losers,dust_ID_string,experiment_ID_set,experiment_id_string,"Poor",generate_graphics=False)
 
         check_connection(rates,used_sessions)
     return sum(rates)
@@ -221,17 +225,20 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
             #if len(performance_total)>0: session.performance_factor = statistics.median(performance_total)
             if len(performance_total)>0: session.performance_factor = statistics.mean(performance_total)
         for session in session_list:
-            if  session.performance_factor !=0:
                 if session.performance_factor < 1 and session.performance_factor!=0:
                     session.performance_factor = -1/session.performance_factor
         winners = [session.performance_factor for session in session_list]
         winners.sort()
-        upper_quarter_val = winners[ int(len(winners)*.75)]
-        lower_quarter_val = winners[ int(len(winners)*.25)]
+        print(len(winners))
+        optimal_lower_bound = winners[ int(len(winners)*.6)]
+        optimal_upper_bound = winners[ int(len(winners)*.9)]
+        
+        suboptimal_lower_bound = winners[ int(len(winners)*.1)]
+        suboptimal_upper_bound = winners[ int(len(winners)*.4)]
 
         for session in session_list:
-            if session.performance_factor > upper_quarter_val : upper_session_list.append(session)
-            if session.performance_factor < lower_quarter_val : low_session_list.append(session)
+            if optimal_lower_bound < session.performance_factor < optimal_upper_bound : upper_session_list.append(session)
+            if suboptimal_lower_bound < session.performance_factor < suboptimal_upper_bound  : low_session_list.append(session)
 
 
             winners.append(session.performance_factor)
@@ -264,11 +271,12 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
         fig.set_size_inches(15, 8)
 
         plt.savefig("double_performance_distribution.png")
-        plt.show()
+        #plt.show()
         return upper_session_list,low_session_list
 
 
 def check_connection(rates, session_list):
+    st = time.time()
     plt.close("all")
 
     plt.figure()
@@ -284,33 +292,33 @@ def check_connection(rates, session_list):
     # plt.show(block = False)
 
     plt.figure()
-    # mv_map = {}
-    # for v in mv: mv_map[v] = []
-    # plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
-    # plt.xlabel("Minimum session velocity")
-    # plt.ylabel("Session performance factor (winner-ness)")
-    # for session in session_list:
-    #     if session.min_V in mv_map: mv_map[session.min_V].append(session.performance_factor)
+    mv_map = {}
+    for v in mv: mv_map[v] = []
+    plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
+    plt.xlabel("Minimum session velocity")
+    plt.ylabel("Session performance factor (winner-ness)")
+    for session in session_list:
+        if session.min_V in mv_map: mv_map[session.min_V].append(session.performance_factor)
     
-    # min_vs = mv_map.keys()
-    # mvs = []
-    # pfs = []
-    # # print(len(session_list))
-    # # print(sum(1 for s in session_list if s.performance_factor==0))
-    # for key in min_vs:
-    #     if statistics.median(mv_map[key])<10 and len(mv_map[key])>10:
-    #         pfs.append(statistics.median(mv_map[key]))
-    #         mvs.append(key)
-    # plt.scatter(mvs,pfs)
-    # # plt.show()
+    min_vs = mv_map.keys()
+    mvs = []
+    pfs = []
+    # print(len(session_list))
+    # print(sum(1 for s in session_list if s.performance_factor==0))
+    for key in min_vs:
+        if statistics.median(mv_map[key])<10 and len(mv_map[key])>10:
+            pfs.append(statistics.median(mv_map[key]))
+            mvs.append(key)
+    plt.scatter(mvs,pfs)
+    # plt.show()
 
-            
+    print("Time to check connection: ",time.time()-st,file = sys.stderr)
             
 
 #Generate the graphs of the session breakdown
 def generate_results_graphs(session_list):
-
     st = time.time()
+
 
     plt.figure()
 
@@ -371,22 +379,20 @@ def generate_results_graphs(session_list):
     plt.ylabel("Number of sessions",fontsize = 14)
     plt.savefig("results_sessions_particle_counts.png")
 
-
-    print("Time to breakdown graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
+    # print("Time for breakdown graphs: ",time.time()-st,file = sys.stderr))
 
 #Generate graphs of the histogram bins
-def generate_bins_graphs(session_list,v_bins,p_bins,rates):
+def generate_bins_graphs(session_list,v_bins,p_bins,rates,v_min,v_max,description_string):
     st = time.time()
-
     #2.24
     #Runtime bins
     plt.figure()
-    v_bins = [s/1000/60/60 for s in v_bins]
-    plt.bar([i/10 for i in range(accelerator_velocity_range*10)], v_bins)
-    plt.title("Run time total for each velocity bin")
-    plt.xlabel("Velocity range bins")
+    v_bins =  v_bins[int(v_min*10):int(v_max*10)]
+    plt.bar( [(i/10) for i in range(int(v_min*10),int(v_max*10))], v_bins)
+    plt.title(description_string+" Results Run time total for each velocity bin")
+    plt.xlabel("Velocity range bins, bin size = 0.1km/s")
     plt.ylabel("Total active time (hours)")
-    plt.savefig("results_runtime.png")
+    plt.savefig(description_string+"_results_runtime.png")
 
 
     #1.4
@@ -395,33 +401,36 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates):
     particles = []
     for s in session_list: 
         for p in s.particle_list: particles.append(p[2]/1000)
-    plt.hist(particles,bins = [i for i in range(0,accelerator_velocity_range,1)])
-    plt.title("Particle count total total for each velocity bin")
+    plt.hist(particles,range=(v_min,v_max),bins = int(v_max*10)-int(v_min*10))
+    plt.title(description_string+" Results Particle count total total for each velocity bin")
     plt.yscale("log")
-    plt.xlabel("Velocity range bins")
+    plt.xlabel("Velocity range bins, bin size = 0.1km/s")
     plt.ylabel("Total particles in bin")
-    plt.savefig("results_particle_count.png")
+    plt.savefig(description_string+"_results_particle_count.png")
 
     #3.0
     #Rate bins
     plt.figure()
-    plt.bar([i/10 for i in range(accelerator_velocity_range*10)],rates)
-    plt.title("Rates of dust detection")
+    bins = [(i/10) for i in range(int(v_min*10),int(v_max*10))]
+    rates = [rates[int(i*10)] for i in bins]
+    plt.bar(bins,rates)
+    plt.title(description_string+" Results Rates of dust detection")
     plt.yscale("log")
-    plt.xlabel("Velocity range bins")
+    plt.xlabel("Velocity range bins, bin size = 0.1km/s")
     plt.ylabel("Rate of detection (particles/hour)")
-    plt.savefig("results_rates.png")
+    plt.savefig(description_string+"_results_rates.png")
 
-    print("Time to rate graphs: %.2f seconds" %(time.time() -st),file = sys.stderr)
 
     # for session in session_list:
     #     print(session,file = sys.stderr)
+    print("Time for %s rate graphs %f" %(description_string,time.time()-st),file = sys.stderr)
 
 #Make a set out of a string like 1-4,5,11,13-19
 def make_ID_set(string_list):
     #Make an empty set
     valid_ID_set = set()
-    if string_list== "Any" or string_list == "" or string_list == "All":
+    if string_list== "Any," or string_list == "" or string_list == "All":
+        valid_ID_set.add(-1)
         return valid_ID_set
     
     #Split the string into a sequence of items
@@ -444,6 +453,9 @@ def make_ID_set(string_list):
                 val = int(entry)
                 valid_ID_set.add(val)
             except ValueError:
+                if entry=="Any":
+                    valid_ID_set.add(-1)
+                    return valid_ID_set
                 print("Error converting: %s to valid ID" % (entry),file = sys.stderr)
                 
     return valid_ID_set

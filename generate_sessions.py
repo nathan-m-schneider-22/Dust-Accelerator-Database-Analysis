@@ -80,7 +80,21 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
             datetime.fromtimestamp(self.end/1000).strftime("%c"),\
             self.duration/1000/60,self.material,self.min_V,self.max_V,self.start,self.end,\
             self.dustID,self.experimentID,len(self.particle_list),self.quality)
+
+def print_dust_types(dust_list):
+    dust_map = {}
+    dust_map["Any Material"] = [(-1,"All")]
+    for dust in dust_list:
+        if dust[1] not in dust_map:
+            dust_map[dust[1]] = [(-1,"All")]
+        dust_map[dust[1]].append((dust[0],dust[2].strip().replace("\n","")))
     
+    for dust in dust_map:
+        print(dust,end="{")
+        for batch in dust_map[dust]:
+            #print(batch)
+            print(" %s|%s"%(batch[0],batch[1]),end="\t",flush=True)
+        print()    
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
@@ -112,14 +126,13 @@ class Rate_analyzer:
         self.write_data()
 
         #A few debugging statements
-        print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60))
-        print("Total sessions: ",len(self.session_list))
-        print("Valid: %d Empty: %d" %(len(self.valid_sessions),len(self.empty_sessions)))
+        print("Total runtime: %2f hours" %(sum(s.duration for s in self.session_list)/1000/60/60),file = sys.stderr)
+        print("Total sessions: ",len(self.session_list),file = sys.stderr)
+        print("Valid: %d Empty: %d" %(len(self.valid_sessions),len(self.empty_sessions)),file = sys.stderr)
         print("Valid time: %.2f Empty time: %.2f" %(sum(s.duration for s in self.valid_sessions)/1000/60/60,\
-            sum(s.duration for s in self.empty_sessions)/1000/60/60))
-        print("Total Particles: %d" %(sum(len(s.particle_list) for s in self.valid_sessions)))
-        print("Time to calculate: %.2fs" %(time.time()-start_time))
-
+            sum(s.duration for s in self.empty_sessions)/1000/60/60),file = sys.stderr)
+        print("Total Particles: %d" %(sum(len(s.particle_list) for s in self.valid_sessions)),file = sys.stderr)
+        print("Time to calculate: %.2fs" %(time.time()-start_time),file = sys.stderr)
 
 
 
@@ -180,15 +193,18 @@ class Rate_analyzer:
         for d in dust_type:
             self.type_to_name[d[0]] = d[1]   
 
+        cursor.execute("SELECT id_dust_type,dust_name,comments \
+        FROM ccldas_production.dust_type")
+        dust_type_comments = cursor.fetchall()
+        print_dust_types(dust_type_comments)
 
         #Retrieving all the dust events is rather time-consuming, so a local csv is stored and updated
         # each time this program is run. 
         self.particles = []
-        print()
         try:
             #If the the file exists
             with open('particles.csv', 'r') as particle_file:
-                print("Fetching particles locally",flush= True)
+                print("Fetching particles locally",flush= True,file = sys.stderr)
                 #read it into memory
                 for line in particle_file:
                     vals = line.split(",")
@@ -204,7 +220,7 @@ class Rate_analyzer:
 
         #If the file does not exist
         except FileNotFoundError:
-            print("Fetching particles by web",flush= True)
+            print("Fetching particles by web",flush= True,file = sys.stderr)
             #pull all the data from the database
             query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
             FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
@@ -217,8 +233,7 @@ class Rate_analyzer:
         for particle in self.particles:
             particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
         particle_file.close()
-        print("All data fetched. Time: %.2f seconds" %(time.time()-start_time))
-
+        print("All data fetched. Time: %.2f seconds" %(time.time()-start_time),file = sys.stderr)
 
     #The timeline of dust events is split into groups based on a given gap size
     # The object fields used are particles[], velocities[] and this method creates and
@@ -401,7 +416,9 @@ command_line_args= sys.stdin.read().strip()
 
 if command_line_args=="":
 
-    a = Rate_analyzer("localhost","root","dust","ccldas_production")
+    a = Rate_analyzer("localhost","root","dust","ccldas_production",25)
 else:
     argv = command_line_args.split("|")
     a = Rate_analyzer(argv[0],argv[1],argv[2],"ccldas_production",int(argv[3]))
+
+

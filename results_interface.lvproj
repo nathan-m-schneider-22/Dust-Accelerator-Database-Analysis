@@ -154,6 +154,44 @@
 				<Property Name="TgtF_targetfileGUID" Type="Str">{BA8F59B2-DA03-4247-8CAE-151F25647378}</Property>
 				<Property Name="TgtF_targetfileName" Type="Str">Application.exe</Property>
 			</Item>
+			<Item Name="results_interface4" Type="EXE">
+				<Property Name="App_copyErrors" Type="Bool">true</Property>
+				<Property Name="App_INI_aliasGUID" Type="Str">{399AEAF3-3F22-4773-833F-B79CB72EAEF4}</Property>
+				<Property Name="App_INI_GUID" Type="Str">{F80CBDFC-1E9E-4B35-A4DC-E3F39A1399FB}</Property>
+				<Property Name="App_serverConfig.httpPort" Type="Int">8002</Property>
+				<Property Name="Bld_autoIncrement" Type="Bool">true</Property>
+				<Property Name="Bld_buildCacheID" Type="Str">{595AFBD9-0975-481B-A103-D0BDC5C7277F}</Property>
+				<Property Name="Bld_buildSpecName" Type="Str">results_interface4</Property>
+				<Property Name="Bld_excludeInlineSubVIs" Type="Bool">true</Property>
+				<Property Name="Bld_excludeLibraryItems" Type="Bool">true</Property>
+				<Property Name="Bld_excludePolymorphicVIs" Type="Bool">true</Property>
+				<Property Name="Bld_localDestDir" Type="Path">../builds/NI_AB_PROJECTNAME/results_interface4</Property>
+				<Property Name="Bld_localDestDirType" Type="Str">relativeToCommon</Property>
+				<Property Name="Bld_modifyLibraryFile" Type="Bool">true</Property>
+				<Property Name="Bld_previewCacheID" Type="Str">{8921DB4D-65FF-4CC3-91D9-CCC8006B7841}</Property>
+				<Property Name="Bld_version.major" Type="Int">1</Property>
+				<Property Name="Destination[0].destName" Type="Str">Application.exe</Property>
+				<Property Name="Destination[0].path" Type="Path">../builds/NI_AB_PROJECTNAME/results_interface4/Application.exe</Property>
+				<Property Name="Destination[0].preserveHierarchy" Type="Bool">true</Property>
+				<Property Name="Destination[0].type" Type="Str">App</Property>
+				<Property Name="Destination[1].destName" Type="Str">Support Directory</Property>
+				<Property Name="Destination[1].path" Type="Path">../builds/NI_AB_PROJECTNAME/results_interface4/data</Property>
+				<Property Name="DestinationCount" Type="Int">2</Property>
+				<Property Name="Source[0].itemID" Type="Str">{63588B3A-B3DB-4F99-A766-03030A4A9C47}</Property>
+				<Property Name="Source[0].type" Type="Str">Container</Property>
+				<Property Name="Source[1].destinationIndex" Type="Int">0</Property>
+				<Property Name="Source[1].itemID" Type="Ref">/My Computer/results_interface.vi</Property>
+				<Property Name="Source[1].sourceInclusion" Type="Str">TopLevel</Property>
+				<Property Name="Source[1].type" Type="Str">VI</Property>
+				<Property Name="SourceCount" Type="Int">2</Property>
+				<Property Name="TgtF_companyName" Type="Str">Laboratory for Atmospheric and Space Physics</Property>
+				<Property Name="TgtF_fileDescription" Type="Str">results_interface4</Property>
+				<Property Name="TgtF_internalName" Type="Str">results_interface4</Property>
+				<Property Name="TgtF_legalCopyright" Type="Str">Copyright © 2019 Laboratory for Atmospheric and Space Physics</Property>
+				<Property Name="TgtF_productName" Type="Str">results_interface4</Property>
+				<Property Name="TgtF_targetfileGUID" Type="Str">{67123D7E-3A50-451B-B059-38EBC720575A}</Property>
+				<Property Name="TgtF_targetfileName" Type="Str">Application.exe</Property>
+			</Item>
 		</Item>
 	</Item>
 </Project>
