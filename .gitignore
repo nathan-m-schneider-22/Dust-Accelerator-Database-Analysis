@@ -11,5 +11,8 @@ Test*
 *.txt
 get-pip.py
 Production/
+
 comparison.sh
+
 *.xlsx
+
