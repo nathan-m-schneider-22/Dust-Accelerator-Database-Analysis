@@ -136,7 +136,7 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
             and session.start > start and session.end < end:
 
             #Within accepted dust ID
-            if (dust_ID_string == "" or dust_ID_string == "Any," or session.dustID in dust_ID_set):
+            if (-1 in dust_ID_set or session.dustID in dust_ID_set):
 
                 #Accepted Material
                 if (material == "" or material== "Any Material" or session.material == material):
@@ -429,7 +429,7 @@ def generate_bins_graphs(session_list,v_bins,p_bins,rates,v_min,v_max,descriptio
 def make_ID_set(string_list):
     #Make an empty set
     valid_ID_set = set()
-    if string_list== "Any," or string_list == "" or string_list == "All":
+    if string_list in ["","Any","Any,","All"]:
         valid_ID_set.add(-1)
         return valid_ID_set
     

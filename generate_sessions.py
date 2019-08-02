@@ -93,7 +93,7 @@ def print_dust_types(dust_list):
         print(dust,end="{")
         for batch in dust_map[dust]:
             #print(batch)
-            print(" %s|%s"%(batch[0],batch[1]),end="\t",flush=True)
+            print(" %s|%s"%(batch[0],batch[1]),end="~",flush=True)
         print()    
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
