@@ -92,9 +92,23 @@ def print_dust_types(dust_list):
     for dust in dust_map:
         print(dust,end="{")
         for batch in dust_map[dust]:
-            #print(batch)
-            print(" %s|%s"%(batch[0],batch[1]),end="~",flush=True)
+            print(" %s|%s"%(batch[0],batch[1]),end="`",flush=True)
         print()    
+def print_experiment_comments(experiment_list,group_list):
+    group_map = {}
+    for group in group_list:
+        group_map[group[0]] = group[1]
+    group_to_experiment_list = {}
+    for experiment in experiment_list:
+        if experiment[1] not in group_to_experiment_list:
+            group_to_experiment_list[experiment[1]] = []
+        group_to_experiment_list[experiment[1]].append("%d|%d|%s" %(experiment[0],experiment[2],experiment[3].replace("\n","")))
+    print(group_to_experiment_list)
+    for group in group_to_experiment_list:
+        print(group_map[group],end = "{")
+        for experiment in group_to_experiment_list[group]:
+            print(experiment,end = "`")
+        print()
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
@@ -197,6 +211,13 @@ class Rate_analyzer:
         FROM ccldas_production.dust_type")
         dust_type_comments = cursor.fetchall()
         print_dust_types(dust_type_comments)
+        print("~",end = "")
+        cursor.execute("SELECT id_experiment_settings,id_groups,\
+            integer_timestamp,description FROM ccldas_production.experiment_settings;")
+        experiment_comments = cursor.fetchall()
+        cursor.execute("SELECT id_groups,group_names FROM ccldas_production.groups;")
+        group_list = cursor.fetchall()
+        print_experiment_comments(experiment_comments,group_list)
 
         #Retrieving all the dust events is rather time-consuming, so a local csv is stored and updated
         # each time this program is run. 
