@@ -83,7 +83,6 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
 
 def print_dust_types(dust_list):
     dust_map = {}
-    dust_map["Any Material"] = [(-1,"All")]
     for dust in dust_list:
         if dust[1] not in dust_map:
             dust_map[dust[1]] = [(-1,"All")]
@@ -93,7 +92,8 @@ def print_dust_types(dust_list):
         print(dust,end="{")
         for batch in dust_map[dust]:
             print(" %s|%s"%(batch[0],batch[1]),end="`",flush=True)
-        print()    
+        print("}",end = "")   
+
 def print_experiment_comments(experiment_list,group_list):
     group_map = {}
     for group in group_list:
@@ -103,12 +103,11 @@ def print_experiment_comments(experiment_list,group_list):
         if experiment[1] not in group_to_experiment_list:
             group_to_experiment_list[experiment[1]] = []
         group_to_experiment_list[experiment[1]].append("%d|%d|%s" %(experiment[0],experiment[2],experiment[3].replace("\n","")))
-    print(group_to_experiment_list)
     for group in group_to_experiment_list:
         print(group_map[group],end = "{")
         for experiment in group_to_experiment_list[group]:
             print(experiment,end = "`")
-        print()
+        print("}",end = "")    
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
@@ -211,9 +210,9 @@ class Rate_analyzer:
         FROM ccldas_production.dust_type")
         dust_type_comments = cursor.fetchall()
         print_dust_types(dust_type_comments)
-        print("~",end = "")
+        print("@",end = "")
         cursor.execute("SELECT id_experiment_settings,id_groups,\
-            integer_timestamp,description FROM ccldas_production.experiment_settings;")
+            integer_timestamp,tag FROM ccldas_production.experiment_settings;")
         experiment_comments = cursor.fetchall()
         cursor.execute("SELECT id_groups,group_names FROM ccldas_production.groups;")
         group_list = cursor.fetchall()

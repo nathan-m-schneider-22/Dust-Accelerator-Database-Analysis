@@ -200,16 +200,16 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     if generate_graphics:
         generate_results_graphs(used_sessions)
 
+        if (sum(rates)) !=0:
+            st = time.time()
+            winners,losers = find_optimum_rates(used_sessions,session_to_rate_bins,rates)
+            print("Time to find optimum ",time.time()-st,file = sys.stderr)
+            calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
+                winners,dust_ID_string,experiment_ID_set,experiment_id_string,"Optimal",generate_graphics=False)
+            calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
+                losers,dust_ID_string,experiment_ID_set,experiment_id_string,"Poor",generate_graphics=False)
 
-        st = time.time()
-        winners,losers = find_optimum_rates(used_sessions,session_to_rate_bins,rates)
-        print("Time to find optimum ",time.time()-st,file = sys.stderr)
-        calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
-            winners,dust_ID_string,experiment_ID_set,experiment_id_string,"Optimal",generate_graphics=False)
-        calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,material,\
-            losers,dust_ID_string,experiment_ID_set,experiment_id_string,"Poor",generate_graphics=False)
-
-        check_connection(rates,used_sessions)
+            check_connection(rates,used_sessions)
     return sum(rates)
 
 def find_optimum_rates(session_list,session_to_rate_bins,rates):
