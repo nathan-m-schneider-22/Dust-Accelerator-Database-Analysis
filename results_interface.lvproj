@@ -32,6 +32,7 @@
 				<Item Name="Trim Whitespace.vi" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/Trim Whitespace.vi"/>
 				<Item Name="whitespace.ctl" Type="VI" URL="/&lt;vilib&gt;/Utility/error.llb/whitespace.ctl"/>
 			</Item>
+			<Item Name="create_material_experiment_lists.vi" Type="VI" URL="../create_material_experiment_lists.vi"/>
 			<Item Name="Image_resize.vi" Type="VI" URL="../Image_resize.vi"/>
 			<Item Name="labview_results_get.vi" Type="VI" URL="../labview_results_get.vi"/>
 			<Item Name="labview_sessions_generate.vi" Type="VI" URL="../labview_sessions_generate.vi"/>

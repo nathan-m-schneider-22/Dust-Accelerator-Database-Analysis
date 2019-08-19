@@ -68,6 +68,8 @@ class Session:
         self.experimentID = None
         self.min_V = minV
         self.max_V = maxV
+        self.min_mass = 123456
+        self.max_mass = 123456
         self.particle_list = []
         self.quality = 5
         self.performance_factor = 1
@@ -123,13 +125,14 @@ class Rate_analyzer:
         #Split these sessions by gaps where the pelletron is not firing
         self.frequency_segment()
 
+        #Split the sessions along the experiment ID changes, also give each session the epxeriment ID 
+        # at the time
+        self.experiment_tag_segment()
+
         #Split the sessions along the velocity range changes, also give each session the velocity paramters
         # at the time
         self.velocity_tag_segment()
 
-        #Split the sessions along the experiment ID changes, also give each session the epxeriment ID 
-        # at the time
-        self.experiment_tag_segment()
 
         #Use the data stored in each dust event to tag the session with the dustID and material
         self.particle_tag()
@@ -166,7 +169,7 @@ class Rate_analyzer:
         if error_code!= 25: exit(25)
         #Fetch all the velocity parameter changes, with the timestamp, min, and max
         cursor.execute("select integer_timestamp, velocity_max, \
-        velocity_min from psu order by integer_timestamp ASC")
+        velocity_min,mass_max, mass_min from psu order by integer_timestamp ASC")
         self.velocities = cursor.fetchall()
 
         #Fetch a table of the source setting frequencies, along with the current and next timestamp
@@ -228,10 +231,10 @@ class Rate_analyzer:
                 #read it into memory
                 for line in particle_file:
                     vals = line.split(",")
-                    part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]))
+                    part = (int(vals[0]),int(vals[1]),float(vals[2]),int(vals[3]),float(vals[4]))
                     self.particles.append(part)
                 # retrive any new particles from the database afte the last known timestamp
-                query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+                query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality,mass\
                 FROM ccldas_production.dust_event WHERE (integer_timestamp >%d and velocity <= 100000 \
                 AND velocity >= 0) ORDER BY integer_timestamp ASC" % (self.particles[-1][0])
                 cursor.execute(query)
@@ -242,7 +245,7 @@ class Rate_analyzer:
         except FileNotFoundError:
             print("Fetching particles by web",flush= True,file = sys.stderr)
             #pull all the data from the database
-            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality\
+            query = "SELECT integer_timestamp, id_dust_info,velocity,estimate_quality,mass\
             FROM ccldas_production.dust_event WHERE ( velocity <= 100000 \
             AND velocity >= 0) ORDER BY integer_timestamp ASC"
             cursor.execute(query)
@@ -251,7 +254,7 @@ class Rate_analyzer:
         #Write the data to the file in csv format
         particle_file = open("particles.csv","w")
         for particle in self.particles:
-            particle_file.write("%d,%d,%f,%d\n" %(particle[0],particle[1],particle[2],particle[3]))
+            particle_file.write("%d,%d,%f,%d,%E\n" %(particle[0],particle[1],particle[2],particle[3],particle[4]))
         particle_file.close()
         print("All data fetched. Time: %.2f seconds" %(time.time()-start_time),file = sys.stderr)
 
@@ -341,7 +344,9 @@ class Rate_analyzer:
             # after session start, so velocity_index-1
             session.min_V = self.velocities[velocity_index-1][2]
             session.max_V = self.velocities[velocity_index-1][1]
-          
+            session.min_mass = self.velocities[velocity_index-1][4]
+            session.max_mass = self.velocities[velocity_index-1][3]
+
             #If the velocity change happens during the session
             if self.velocities[velocity_index][0] < session.end:
                 #replace the session with two split around it
