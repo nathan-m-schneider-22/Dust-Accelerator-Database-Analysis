@@ -6,7 +6,11 @@ This tool is designed to give insight on historical data of the dust accelerator
 ## Windows Setup
 1. Install python 3, this was designed on python 3.6 but later versions will likely work. If you don't have Python installed install it from https://www.python.org/ftp/python/3.7.4/python-3.7.4-amd64.exe
 2. Run the setup utility to install the mySQL Python Connector and matplotlib library. This will also install python package utility pip.
-3. If this doesn't work 
+3. If this doesn't work as intended, use pip to install the necessary packages
+      - On windows, open the command line by pressing Windows+R, entering cmd and pressing enter
+      - To install matplotlib install use `pip install matplotlib`
+      - To install the mysql connector, use `pip install 
+
 # Usage
 To run this tool launch the results_interface.vi application
 
