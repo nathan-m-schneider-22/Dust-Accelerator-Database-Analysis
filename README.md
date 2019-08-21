@@ -15,6 +15,7 @@ This tool is designed to give insight on historical data of the dust accelerator
 To run this tool launch the results_interface.vi application
 
 ## Troubleshooting
+If the program seems caught in a loop with Authentication failure, stop the program and check the debugging tab
 If the program fails to give results, consult the debugging tab of the vi
  - Error: ModuleNotFoundError: No module named 'mysql'
     - Failed to install the mySQL python connector, see setup first

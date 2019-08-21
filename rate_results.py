@@ -30,8 +30,6 @@ accelerator_velocity_range = 100
 bin_size = .1
 
 
-lower_mass_bound = -21
-upper_mass_bound = -10
 
 #The session class structure must be included, as the list of 
 # sessions from generate_sessions.py is to be directly loaded
@@ -199,16 +197,22 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
     #More stderr debug info
 
     print("Time to calculate %s results %f" %(description_string,time.time()-st),file = sys.stderr)
-    if make_heatmap: generate_rate_heatmap(used_sessions,start,end,material)
 
+    #Make the heatmaps
+    if make_heatmap: 
+        generate_rate_heatmap(used_sessions,start,end,material)
+    generate_results_graphs(used_sessions)
     generate_bins_graphs(used_sessions,runtime_bins,particle_count_bins,rates,v_min,v_max,description_string)
+
     #Graphs for display on the insights tab of the labview vi are generated here
     if generate_graphics:
         generate_results_graphs(used_sessions)
+
         if (sum(rates)) !=0:
             st = time.time()
             winners,losers = find_optimum_rates(used_sessions,session_to_rate_bins,rates)
             print("Time to find optimum ",time.time()-st,file = sys.stderr)
+            #Calculate results for the optimum and poor results
             calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,min_mass,max_mass,material,\
                 winners,dust_ID_string,experiment_ID_set,experiment_id_string,"Optimal",False,generate_graphics=False)
             calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,min_mass,max_mass,material,\
@@ -217,34 +221,44 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
             check_connection(rates,used_sessions)
     return sum(rates)
 
+#Generates heatmaps for the given sessions (takes a long time)
 def generate_rate_heatmap(session_list,start,end,material_string):
     print("Making Heatmaps",file = sys.stderr)
+
+    #Convert timestamps to seconds, not ms
     start/=(1000)
     end/=(1000)
     st = time.time()
+
+    #Set basic paramters
     min_velocity = .1
+    lower_mass_bound = -21
+    upper_mass_bound = -10
+
+    #Resolution is pixel number for the vertical axis
     resolution = 200
 
+    #Create the logspace boundaries for the bins
     velocity_values = np.logspace(math.log10(min_velocity),2,num=2*resolution)    
-    velocity_multiplier = velocity_values[1]/velocity_values[0]
     mass_values = np.logspace(lower_mass_bound,upper_mass_bound,num=resolution)
+
+    #Find the multiplier for the logspace, important for assigning mass and velocity to correct bins
+    velocity_multiplier = velocity_values[1]/velocity_values[0]
     mass_multiplier = mass_values[1]/mass_values[0]
+
+    #Runtime bins 
     runtime_bins = [ [0]*(len(velocity_values)-1) for i in range(len(mass_values)-1)]
     particle_count_bins = [ [0]*(len(velocity_values)-1) for i in range(len(mass_values)-1)]
 
+    #For each session, add its duration in hours to the valid bins
     for session in session_list:
         if session.min_mass == None: continue
         for i in range(len(velocity_values)-1):
             for j in range(len(mass_values)-1):
-                # print(session.min_mass,session.max_mass)
-
-                # print(session.min_V <= velocity_values[i+1] , session.max_V >= velocity_values[i],\
-                #     session.min_mass <= mass_values[j+1] , session.max_mass >=  mass_values[j],\
-                #         mass_values[j],mass_values[j+1])
                 if velocity_values[i] > session.min_V and velocity_values[i] < session.max_V and\
                     session.min_mass < mass_values[j+1] and session.max_mass >  mass_values[j]:
                     runtime_bins[j][i] += session.duration/1000/60/60
-
+        #For each particle in that session, insert it into the right particle count bin
         for particle in session.particle_list:      
             try:
                 velocity_index = int(math.log(particle[2]/1000/(min_velocity))/math.log(velocity_multiplier))
@@ -253,9 +267,13 @@ def generate_rate_heatmap(session_list,start,end,material_string):
             except IndexError:
                 print("Indexing error with particle: ",particle,velocity_index,mass_index,file=sys.stderr)
     
+    #Now here's the tough thing, the color map. Without intervention, the 0s blend in too easily with the low numbers, so 
+    #A color map with a specified 0 was necessary. I did it the simplest way, guaranteeing that the 0s will 
+    #Be several steps from the lowest numbers by lowering the 0 values to negatives, and making the 
+    #Color map resolution the color array size variable. See here for more : 
+    # https://matplotlib.org/3.1.0/tutorials/colors/colormap-manipulation.html
     color_array_size = 10000
     max_particles = np.amax(particle_count_bins)
-
 
     viridis = cm.get_cmap('viridis', color_array_size)
     newcolors = viridis(np.linspace(0, 1, color_array_size))
@@ -263,7 +281,7 @@ def generate_rate_heatmap(session_list,start,end,material_string):
     newcolors[0] = white
     newcmp = ListedColormap(newcolors)
 
-
+    #Graph making for the runtime heatmaps
     plt.close('all')
     fig = plt.figure(figsize=(11,8))
     plt.imshow(runtime_bins,origin="lower")
@@ -272,25 +290,28 @@ def generate_rate_heatmap(session_list,start,end,material_string):
     plt.title("Accelerator Runtime Distribution by Mass and Velocity\n%s - %s with %s"\
          %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
              material_string),fontsize = 14)
+    #Custom tickmarks
     ticks = [.1,.3,1,5,10,20,40,100]
     tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
     plt.xticks(tick_vals,ticks)
     ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
     tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
     plt.yticks(tick_vals,ticks)
+
+    #Colorbar and saving
     plt.colorbar().set_label("Hours of runtime",fontsize = 14)
     filename = "heatmaps/Runtime_heatmap_%s_to_%s_%s.png" %(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
         ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
-    
     plt.savefig(filename.replace("-0","-").replace("_0","_"))
 
-    #particle_count_bins = sci_filters.gaussian_filter(particle_count_bins,resolution//100)
-    
+    #For the particle count bins, to avoid the colormap as classifying low values in the same color as 0s, I move the 0s
+    #4 (to be safe) color steps down from 0
     for i in range(len(velocity_values)-1):
         for j in range(len(mass_values)-1):
             if particle_count_bins[j][i]==0:
                 particle_count_bins[j][i] -= 4*max_particles/color_array_size
 
+    #Particle distribution figure
     fig = plt.figure(figsize=(11,8))
     plt.imshow(particle_count_bins,cmap =newcmp,origin="lower")
     plt.xlabel("Velocity (km/s)",fontsize = 14)
@@ -298,27 +319,32 @@ def generate_rate_heatmap(session_list,start,end,material_string):
     plt.title("Accelerator Particle Distribution by Mass and Velocity\n%s - %s with %s"\
          %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
              material_string),fontsize = 14)
+
+    #Same custom ticks
     ticks = [.1,.3,1,5,10,20,40,100]
     tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
     plt.xticks(tick_vals,ticks)
     ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
     tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
     plt.yticks(tick_vals,ticks)
+
+    #Colorbar and saving
     plt.colorbar().set_label("Number of particles",fontsize = 14)
-    
     filename = "heatmaps/Particle_heatmap_%s_to_%s_%s.png"%(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
         ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
     plt.savefig(filename.replace("-0","-").replace("_0","_"))
 
+    #Now we divide the distribution graph by the runtime graph to get the rate graph
+    rate_bins = particle_count_bins
     max_particles = np.amax(particle_count_bins)
     for i in range(len(velocity_values)-1):
         for j in range(len(mass_values)-1):
             if particle_count_bins[j][i]<0:
-                particle_count_bins[j][i] = 0
+                rate_bins[j][i] = 0
             elif runtime_bins[j][i]>0:
-                particle_count_bins[j][i]/=runtime_bins[j][i]
+                rate_bins[j][i]/=runtime_bins[j][i]
 
-    
+    #Rate graph
     fig = plt.figure(figsize=(11,8))
     plt.imshow(particle_count_bins,origin="lower",cmap = newcmp)
     plt.xlabel("Velocity (km/s)",fontsize = 14)
@@ -338,47 +364,40 @@ def generate_rate_heatmap(session_list,start,end,material_string):
     plt.savefig(filename.replace("-0","-").replace("_0","_"))
 
 
-
+#Splitting the sessions into optimal and poor, returning the lists
 def find_optimum_rates(session_list,session_to_rate_bins,rates):
         upper_session_list,low_session_list = [],[]
-
         for session in session_list:
             performance_total = []
-            
             for i in range(int(session.min_V/bin_size),min(int(session.max_V/bin_size),int(accelerator_velocity_range/bin_size))):
                 if rates[i]!=0:
                     expected_bin_rate =  session_to_rate_bins[session][i]*1000*60*60
                     performance_total.append(expected_bin_rate/rates[i])
-            #if len(performance_total)>0: session.performance_factor = statistics.median(performance_total)
             if len(performance_total)>0: session.performance_factor = statistics.mean(performance_total)
+            #The session performance factor is determined by the mean comparison of the actual rate with the expected rate
+        
+        #Distribute the rates to appear as factor differences for easier viewing
         for session in session_list:
                 if session.performance_factor < 1 and session.performance_factor!=0:
                     session.performance_factor = -1/session.performance_factor
-        winners = [session.performance_factor for session in session_list]
-        winners.sort()
+        performance_factor_list = [session.performance_factor for session in session_list]
+        performance_factor_list.sort()
         
-        optimal_lower_bound = winners[ int(len(winners)*.6)]
-        optimal_upper_bound = winners[ int(len(winners)*.9)]
+        #Determine the bounds for optimal and poor, hopefully avoiding large outliers
+        optimal_lower_bound = performance_factor_list[ int(len(performance_factor_list)*.6)]
+        optimal_upper_bound = performance_factor_list[ int(len(performance_factor_list)*.9)]
         
-        suboptimal_lower_bound = winners[ int(len(winners)*.1)]
-        suboptimal_upper_bound = winners[ int(len(winners)*.4)]
+        suboptimal_lower_bound = performance_factor_list[ int(len(performance_factor_list)*.1)]
+        suboptimal_upper_bound = performance_factor_list[ int(len(performance_factor_list)*.4)]
 
+        #Add the sessions accordingly
         for session in session_list:
             if optimal_lower_bound < session.performance_factor < optimal_upper_bound : upper_session_list.append(session)
             if suboptimal_lower_bound < session.performance_factor < suboptimal_upper_bound  : low_session_list.append(session)
 
-
-            winners.append(session.performance_factor)
-
-        winners = [s.performance_factor for s in session_list if s.performance_factor != 0]
+        performance_factor_list = [s.performance_factor for s in session_list if s.performance_factor != 0]
         
-        plt.figure(figsize=(7,5))
-        plt.title("Distribution of sessions by factor of performance compared to mean")
-        plt.xlabel("Factor of performance compared to mean")
-        plt.ylabel("Number of sessions")
-        plt.hist(winners,histtype ="bar",bins = 100,stacked=True,range = (-10,10),label=(">20 min","<20 min"))
-        plt.savefig("session_performance_distribution")
-
+        #Display the performance factor in two graphs
         plt.close("all")
         plt.subplot(121)
         plt.xlabel("Factor of decrease compared to average rates")
@@ -386,22 +405,21 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
         plt.xlim(10,0)
         plt.title("Worse than average sessions")
 
-        plt.hist([w*-1 for w in winners if w<0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
+        plt.hist([w*-1 for w in performance_factor_list if w<0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
 
         plt.subplot(122)
         plt.xlabel("Factor of increase compared to average rates")
         plt.ylabel("Number of sessions of this factor")
-        plt.hist([w for w in winners if w>0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
+        plt.hist([w for w in performance_factor_list if w>0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
         plt.title("Better than average sessions")
 
         fig = plt.gcf()
         fig.set_size_inches(15, 8)
 
         plt.savefig("double_performance_distribution.png")
-        #plt.show()
         return upper_session_list,low_session_list
 
-
+#Checking for correlation between minimum velocity and performance factor
 def check_connection(rates, session_list):
     st = time.time()
     plt.close("all")
@@ -416,7 +434,6 @@ def check_connection(rates, session_list):
     plt.scatter(mv,pf)
     plt.plot(np.unique(mv), np.poly1d(np.polyfit(mv, pf, 1))(np.unique(mv)))
     plt.savefig("Throttle_graph.png")
-    # plt.show(block = False)
 
     plt.figure()
     mv_map = {}
@@ -430,15 +447,11 @@ def check_connection(rates, session_list):
     min_vs = mv_map.keys()
     mvs = []
     pfs = []
-    # print(len(session_list))
-    # print(sum(1 for s in session_list if s.performance_factor==0))
     for key in min_vs:
         if statistics.median(mv_map[key])<10 and len(mv_map[key])>10:
             pfs.append(statistics.median(mv_map[key]))
             mvs.append(key)
     plt.scatter(mvs,pfs)
-    # plt.show()
-
     print("Time to check connection: ",time.time()-st,file = sys.stderr)
             
 

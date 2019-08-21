@@ -83,6 +83,8 @@ ExperimentID: %s particles: %d Quality: %d\n------------------------------------
             self.duration/1000/60,self.material,self.min_V,self.max_V,self.start,self.end,\
             self.dustID,self.experimentID,len(self.particle_list),self.quality)
 
+
+#Takes the list of materials and batches, and prints the delimited structure to stdout for the VI to use
 def print_dust_types(dust_list):
     dust_map = {}
     for dust in dust_list:
@@ -96,6 +98,7 @@ def print_dust_types(dust_list):
             print(" %s|%s"%(batch[0],batch[1]),end="`",flush=True)
         print("}",end = "")   
 
+#Takes the list of groups and experiments, and prints the delimited structure to stdout for the VI to use
 def print_experiment_comments(experiment_list,group_list):
     group_map = {}
     for group in group_list:
@@ -104,12 +107,15 @@ def print_experiment_comments(experiment_list,group_list):
     for experiment in experiment_list:
         if experiment[1] not in group_to_experiment_list:
             group_to_experiment_list[experiment[1]] = []
-        group_to_experiment_list[experiment[1]].append("%d|%d|%s" %(experiment[0],experiment[2],experiment[3].replace("\n","")))
+        group_to_experiment_list[experiment[1]].append("%d|%d|%s"\
+             %(experiment[0],experiment[2],str(experiment[3]).replace("\n","")))
     for group in group_to_experiment_list:
         print(group_map[group],end = "{")
         for experiment in group_to_experiment_list[group]:
             print(experiment,end = "`")
         print("}",end = "")    
+
+
 #Rate analyzer class is the basis of this program, and it utilizes the data availability of object oriented programming
 # to pass multiple lists to multiple methods. It takes the mySQL database login info to run
 class Rate_analyzer:
@@ -198,6 +204,7 @@ class Rate_analyzer:
         FROM ccldas_production.dust_info")
         dust_info = cursor.fetchall()
 
+        #These maps map a dust ID to a dust type, and a dust type to a dust name
         cursor.execute("SELECT id_dust_type,dust_name \
         FROM ccldas_production.dust_type")
         dust_type = cursor.fetchall()
@@ -209,11 +216,14 @@ class Rate_analyzer:
         for d in dust_type:
             self.type_to_name[d[0]] = d[1]   
 
+        #The dust comments retreive the comments for a given dust ID
         cursor.execute("SELECT id_dust_type,dust_name,comments \
         FROM ccldas_production.dust_type")
         dust_type_comments = cursor.fetchall()
         print_dust_types(dust_type_comments)
+        #Delimiter between materials and experiements
         print("@",end = "")
+        #Pull the experiment data for the VI dropdown menus
         cursor.execute("SELECT id_experiment_settings,id_groups,\
             integer_timestamp,tag FROM ccldas_production.experiment_settings;")
         experiment_comments = cursor.fetchall()
