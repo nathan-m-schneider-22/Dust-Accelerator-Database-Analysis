@@ -218,7 +218,6 @@ def calculate_results(pq_min,pq_max,sq_min,sq_max,start, end, dust_ID_set, v_min
             calculate_results(pq_min,pq_max,sq_min,sq_max,start,end,dust_ID_set,v_min,v_max,min_mass,max_mass,material,\
                 losers,dust_ID_string,experiment_ID_set,experiment_id_string,"Poor",False,generate_graphics=False)
 
-            check_connection(rates,used_sessions)
     return sum(rates)
 
 #Generates heatmaps for the given sessions (takes a long time)
@@ -418,41 +417,6 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
 
         plt.savefig("double_performance_distribution.png")
         return upper_session_list,low_session_list
-
-#Checking for correlation between minimum velocity and performance factor
-def check_connection(rates, session_list):
-    st = time.time()
-    plt.close("all")
-
-    plt.figure()
-    plt.title("Session performance factor variance over minimum selected velocity")
-    plt.xlabel("Minimum session velocity")
-    plt.ylabel("Session performance factor (winner-ness)")
-    mv = [ s.min_V for s in session_list if abs(s.performance_factor) <30]
-    pf = [ s.performance_factor for s in session_list if abs(s.performance_factor) <30]
-
-    plt.scatter(mv,pf)
-    plt.plot(np.unique(mv), np.poly1d(np.polyfit(mv, pf, 1))(np.unique(mv)))
-    plt.savefig("Throttle_graph.png")
-
-    plt.figure()
-    mv_map = {}
-    for v in mv: mv_map[v] = []
-    plt.title("Session performance factor variance over minimum selected velocity (MEDIAN)")
-    plt.xlabel("Minimum session velocity")
-    plt.ylabel("Session performance factor (winner-ness)")
-    for session in session_list:
-        if session.min_V in mv_map: mv_map[session.min_V].append(session.performance_factor)
-    
-    min_vs = mv_map.keys()
-    mvs = []
-    pfs = []
-    for key in min_vs:
-        if statistics.median(mv_map[key])<10 and len(mv_map[key])>10:
-            pfs.append(statistics.median(mv_map[key]))
-            mvs.append(key)
-    plt.scatter(mvs,pfs)
-    print("Time to check connection: ",time.time()-st,file = sys.stderr)
             
 
 #Generate the graphs of the session breakdown
