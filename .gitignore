@@ -1,12 +1,7 @@
 *.csv
 *.png
-matplotlib/
-.vscode/
-Test*
 *.pkl
 *.txt
-Production/
-comparison.sh
 heatmaps/*
 *.xlsx
 *.sh
