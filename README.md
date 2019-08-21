@@ -1,5 +1,5 @@
 # Dust Accelerator Database Analysis
-
+Nathan Schneider schnei.nathan@gmail.com
 ## Project
 This tool is designed to give insight on historical data of the dust accelerator, mainly the rate at which it can produce dust given certain parameters. This labVIEW vi with associated python scripts support the collection, processing, and display of accelerator dust event rate data. 
 
@@ -25,6 +25,5 @@ If the program fails to give results, consult the debugging tab of the vi
     - Or download from https://matplotlib.org/downloads.html
  - Setup error: 'pip' is not recognized as an internal or external command
     - Failed to install pip, run setup.bat again, or install from https://pip.pypa.io/en/stable/installing/
-
 # Implementation
  - See Dust_Data_Project.pptx for details on session generation
