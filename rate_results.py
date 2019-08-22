@@ -396,25 +396,6 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
 
         performance_factor_list = [s.performance_factor for s in session_list if s.performance_factor != 0]
         
-        #Display the performance factor in two graphs
-        plt.close("all")
-        plt.subplot(121)
-        plt.xlabel("Factor of decrease compared to average rates")
-        plt.ylabel("Number of sessions of this factor")
-        plt.xlim(10,0)
-        plt.title("Worse than average sessions")
-
-        plt.hist([w*-1 for w in performance_factor_list if w<0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
-
-        plt.subplot(122)
-        plt.xlabel("Factor of increase compared to average rates")
-        plt.ylabel("Number of sessions of this factor")
-        plt.hist([w for w in performance_factor_list if w>0],histtype ="bar",bins = 100,stacked=True,range = (0,10),label=(">20 min","<20 min"))
-        plt.title("Better than average sessions")
-
-        fig = plt.gcf()
-        fig.set_size_inches(15, 8)
-        plt.savefig("double_performance_distribution.png")
         return upper_session_list,low_session_list
             
 
@@ -424,7 +405,7 @@ def generate_results_graphs(session_list):
 
 
     plt.figure()
-
+    plt.close("all")
     #Graph of the session qualites used in the results
     qualities = [s.quality for s in session_list]
     plt.bar([0,1,2,3,4,5],[qualities.count(i) for i in range(6)])
@@ -487,6 +468,8 @@ def generate_results_graphs(session_list):
 #Generate graphs of the histogram bins
 def generate_bins_graphs(session_list,v_bins,p_bins,rates,v_min,v_max,description_string):
     st = time.time()
+    plt.close("all")
+
     #2.24
     #Runtime bins
     plt.figure()
