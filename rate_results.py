@@ -414,7 +414,6 @@ def find_optimum_rates(session_list,session_to_rate_bins,rates):
 
         fig = plt.gcf()
         fig.set_size_inches(15, 8)
-
         plt.savefig("double_performance_distribution.png")
         return upper_session_list,low_session_list
             
