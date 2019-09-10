@@ -22,9 +22,12 @@ import matplotlib.pyplot as plt
 import math
 import statistics
 import numpy as np
-import scipy.ndimage.filters as sci_filters
 from matplotlib import cm
 from matplotlib.colors import ListedColormap
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LogNorm
+from copy import deepcopy
+
 #The accelerator range and bin size determines the number of bins
 accelerator_velocity_range = 100
 bin_size = .1
@@ -44,8 +47,8 @@ class Session:
         self.experimentID = None
         self.min_V = minV
         self.max_V = maxV
-        self.min_mass = 123456
-        self.max_mass = 123456
+        self.min_mass = -1
+        self.max_mass = -1
         self.particle_list = []
         self.quality = 5
         self.performance_factor = 0
@@ -231,11 +234,13 @@ def generate_rate_heatmap(session_list,start,end,material_string):
 
     #Set basic paramters
     min_velocity = .1
-    lower_mass_bound = -21
+    lower_mass_bound = -22
     upper_mass_bound = -10
 
+    
+
     #Resolution is pixel number for the vertical axis
-    resolution = 200
+    resolution = 100
 
     #Create the logspace boundaries for the bins
     velocity_values = np.logspace(math.log10(min_velocity),2,num=2*resolution)    
@@ -252,116 +257,134 @@ def generate_rate_heatmap(session_list,start,end,material_string):
     #For each session, add its duration in hours to the valid bins
     for session in session_list:
         if session.min_mass == None: continue
-        for i in range(len(velocity_values)-1):
-            for j in range(len(mass_values)-1):
-                if velocity_values[i] > session.min_V and velocity_values[i] < session.max_V and\
-                    session.min_mass < mass_values[j+1] and session.max_mass >  mass_values[j]:
+
+        #These math expresssions convert values into indices on the log scale in constant time
+        min_v_index = int(math.log(max(session.min_V,min_velocity)/(min_velocity))/math.log(velocity_multiplier))
+        max_v_index = int(math.log(min(session.max_V,accelerator_velocity_range)/(min_velocity))/math.log(velocity_multiplier))
+
+        min_m_index = int(math.log(max(session.min_mass,10**lower_mass_bound)/(10**lower_mass_bound))/math.log(mass_multiplier))
+        max_m_index = int(math.log(min(session.max_mass,10**upper_mass_bound)/(10**lower_mass_bound))/math.log(mass_multiplier))
+
+        for i in range(min_v_index,max_v_index):
+            for j in range(min_m_index,max_m_index):
                     runtime_bins[j][i] += session.duration/1000/60/60
         #For each particle in that session, insert it into the right particle count bin
         for particle in session.particle_list:      
             try:
                 velocity_index = int(math.log(particle[2]/1000/(min_velocity))/math.log(velocity_multiplier))
                 mass_index = int(math.log(particle[4]/(10**lower_mass_bound))/math.log(mass_multiplier))
-                particle_count_bins[mass_index][velocity_index]+=1
+                if velocity_index > 0 and mass_index>0: particle_count_bins[mass_index][velocity_index]+=1
+                
             except IndexError:
                 print("Indexing error with particle: ",particle,velocity_index,mass_index,file=sys.stderr)
-    
-    #Now here's the tough thing, the color map. Without intervention, the 0s blend in too easily with the low numbers, so 
-    #A color map with a specified 0 was necessary. I did it the simplest way, guaranteeing that the 0s will 
-    #Be several steps from the lowest numbers by lowering the 0 values to negatives, and making the 
-    #Color map resolution the color array size variable. See here for more : 
-    # https://matplotlib.org/3.1.0/tutorials/colors/colormap-manipulation.html
-    color_array_size = 10000
-    max_particles = np.amax(particle_count_bins)
 
-    viridis = cm.get_cmap('viridis', color_array_size)
-    newcolors = viridis(np.linspace(0, 1, color_array_size))
-    white = np.array([1, 1, 1, 1])
-    newcolors[0] = white
-    newcmp = ListedColormap(newcolors)
 
-    #Graph making for the runtime heatmaps
-    plt.close('all')
-    fig = plt.figure(figsize=(11,8))
-    plt.imshow(runtime_bins,origin="lower")
-    plt.xlabel("Velocity (km/s)",fontsize = 14)
-    plt.ylabel("Mass (kg)",fontsize = 14)
-    plt.title("Accelerator Runtime Distribution by Mass and Velocity\n%s - %s with %s"\
-         %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
-             material_string),fontsize = 14)
-    #Custom tickmarks
-    ticks = [.1,.3,1,5,10,20,40,100]
-    tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
-    plt.xticks(tick_vals,ticks)
-    ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
-    tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
-    plt.yticks(tick_vals,ticks)
 
-    #Colorbar and saving
-    plt.colorbar().set_label("Hours of runtime",fontsize = 14)
-    filename = "heatmaps/Runtime_heatmap_%s_to_%s_%s.png" %(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
-        ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
-    plt.savefig(filename.replace("-0","-").replace("_0","_"))
 
-    #For the particle count bins, to avoid the colormap as classifying low values in the same color as 0s, I move the 0s
-    #4 (to be safe) color steps down from 0
-    for i in range(len(velocity_values)-1):
-        for j in range(len(mass_values)-1):
-            if particle_count_bins[j][i]==0:
-                particle_count_bins[j][i] -= 4*max_particles/color_array_size
+    bins_copy = deepcopy(particle_count_bins)
+    #Graph making for the runtime heatmapscopy.deepcopy()
+    for is_hi_rez in [False, True]:
 
-    #Particle distribution figure
-    fig = plt.figure(figsize=(11,8))
-    plt.imshow(particle_count_bins,cmap =newcmp,origin="lower")
-    plt.xlabel("Velocity (km/s)",fontsize = 14)
-    plt.ylabel("Mass (kg)",fontsize = 14)
-    plt.title("Accelerator Particle Distribution by Mass and Velocity\n%s - %s with %s"\
-         %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
-             material_string),fontsize = 14)
+        if is_hi_rez:
+            particle_count_bins = bins_copy
+        plt.close('all')
+        if is_hi_rez: fig = plt.figure(figsize = (12,7))
+        else: plt.figure()
 
-    #Same custom ticks
-    ticks = [.1,.3,1,5,10,20,40,100]
-    tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
-    plt.xticks(tick_vals,ticks)
-    ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
-    tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
-    plt.yticks(tick_vals,ticks)
+        plt.imshow(runtime_bins,origin="lower",cmap= "jet")
+        plt.xlabel("Velocity (km/s)",fontsize = 14)
+        plt.ylabel("Mass (kg)",fontsize = 14)
+        plt.title("Accelerator Runtime Distribution by Mass and Velocity\n%s - %s with %s"\
+            %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
+                material_string),fontsize = 14)
+        #Custom tickmarks
+        ticks = [.1,.3,1,5,10,20,40,100]
+        tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
+        plt.xticks(tick_vals,ticks)
+        ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
+        tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
+        plt.yticks(tick_vals,ticks)
 
-    #Colorbar and saving
-    plt.colorbar().set_label("Number of particles",fontsize = 14)
-    filename = "heatmaps/Particle_heatmap_%s_to_%s_%s.png"%(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
-        ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
-    plt.savefig(filename.replace("-0","-").replace("_0","_"))
+        #Colorbar and saving
+        plt.colorbar(shrink = .6).set_label("Hours of runtime",fontsize = 14)
+        filename = "heatmaps/Runtime_heatmap_%s_to_%s_%s.png" %(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
+            ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
+        if is_hi_rez: fig.savefig(filename.replace("-0","-").replace("_0","_").replace("/","/hi-rez"))
+        else: plt.savefig(filename.replace("-0","-").replace("_0","_"))
 
-    #Now we divide the distribution graph by the runtime graph to get the rate graph
-    rate_bins = particle_count_bins
-    max_particles = np.amax(particle_count_bins)
-    for i in range(len(velocity_values)-1):
-        for j in range(len(mass_values)-1):
-            if particle_count_bins[j][i]<0:
-                rate_bins[j][i] = 0
-            elif runtime_bins[j][i]>0:
-                rate_bins[j][i]/=runtime_bins[j][i]
+        #For the particle count bins, to avoid the colormap as classifying low values in the same color as 0s, I move the 0s
+        #4 (to be safe) color steps down from 0
+        min_val = math.inf
+        max_particles = np.amax(particle_count_bins)
+        for i in range(len(velocity_values)-1):
+            for j in range(len(mass_values)-1):
+                if particle_count_bins[j][i] != 0:
+                    particle_count_bins[j][i]/= (velocity_values[i+1]-velocity_values[i]) * (mass_values[j+1]-mass_values[j])
+                    if particle_count_bins[j][i] < min_val: min_val = particle_count_bins[j][i]
 
-    #Rate graph
-    fig = plt.figure(figsize=(11,8))
-    plt.imshow(particle_count_bins,origin="lower",cmap = newcmp)
-    plt.xlabel("Velocity (km/s)",fontsize = 14)
-    plt.ylabel("Mass (kg)",fontsize = 14)
-    plt.title("Accelerator Rate Distribution by Mass and Velocity\n%s - %s with %s"\
-         %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
-             material_string),fontsize = 14)
-    ticks = [.1,.3,1,5,10,20,40,100]
-    tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
-    plt.xticks(tick_vals,ticks)
-    ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
-    tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
-    plt.yticks(tick_vals,ticks)
-    plt.colorbar().set_label("Rate of particles per hour",fontsize = 14)
-    filename = "heatmaps/Rate_heatmap_%s_to_%s_%s.png" %(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
-        ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
-    plt.savefig(filename.replace("-0","-").replace("_0","_"))
+        max_particles = np.amax(particle_count_bins)
+        offset = 10**100
+        while offset/10 > min_val: offset/=10
+        
+        for i in range(len(velocity_values)-1):
+            for j in range(len(mass_values)-1):
+                particle_count_bins[j][i]/=offset
+        #Particle distribution figure
+        if is_hi_rez: fig = plt.figure(figsize = (12,7))
+        else: plt.figure()
+        plt.imshow(particle_count_bins,cmap ="jet",origin="lower",norm =LogNorm())
+        plt.xlabel("Velocity (km/s)",fontsize = 14)
+        plt.ylabel("Mass (kg)",fontsize = 14)
+        plt.title("Accelerator Particle Distribution by Mass and Velocity\n%s - %s with %s"\
+            %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
+                material_string),fontsize = 14)
 
+        #Same custom ticks
+        ticks = [.1,.3,1,5,10,20,40,100]
+        tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
+        plt.xticks(tick_vals,ticks)
+        ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
+        tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
+        plt.yticks(tick_vals,ticks)
+
+        #Colorbar and saving
+        plt.colorbar(shrink = .6).set_label("Number of particles per ($10^{%s}$kg)(km/s)" %(int(-1*math.log10(offset))),fontsize = 14)
+        filename = "heatmaps/Particle_heatmap_%s_to_%s_%s.png"%(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
+            ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
+        if is_hi_rez: fig.savefig(filename.replace("-0","-").replace("_0","_").replace("/","/hi-rez"))
+        else: plt.savefig(filename.replace("-0","-").replace("_0","_"))
+
+        #Now we divide the distribution graph by the runtime graph to get the rate graph
+        rate_bins = particle_count_bins
+        max_particles = np.amax(particle_count_bins)
+        for i in range(len(velocity_values)-1):
+            for j in range(len(mass_values)-1):
+                if runtime_bins[j][i]>0:
+                    rate_bins[j][i]/=runtime_bins[j][i]
+
+        #Rate graph
+        if is_hi_rez: fig = plt.figure(figsize = (12,7))
+        else: plt.figure()
+        plt.imshow(particle_count_bins,origin="lower",cmap = "jet",norm = LogNorm())
+        plt.xlabel("Velocity (km/s)",fontsize = 14)
+        plt.ylabel("Mass (kg)",fontsize = 14)
+        plt.title("Accelerator Rate Distribution by Mass and Velocity\n%s - %s with %s"\
+            %(datetime.fromtimestamp(start).strftime("%m/%d/%Y"),datetime.fromtimestamp(end).strftime("%m/%d/%Y"),\
+                material_string),fontsize = 14)
+        ticks = [.1,.3,1,5,10,20,40,100]
+        tick_vals = [int(math.log(i/(min_velocity))/math.log(velocity_multiplier)) for i in ticks]
+        plt.xticks(tick_vals,ticks)
+        ticks = [10**i for i in range(lower_mass_bound,upper_mass_bound+1)]
+        tick_vals = [int(math.log(i/(10**lower_mass_bound))/math.log(mass_multiplier)) for i in ticks]
+        plt.yticks(tick_vals,ticks)
+        plt.colorbar(shrink = .6).set_label("Number of particles per (hour)($10^{%s}$kg)(km/s)" %(int(-1*math.log10(offset))),fontsize = 14)
+        filename = "heatmaps/Rate_heatmap_%s_to_%s_%s.png" %(datetime.fromtimestamp(start).strftime("%m-%d-%Y")\
+            ,datetime.fromtimestamp(end).strftime("%m-%d-%Y"),material_string)
+        if is_hi_rez: fig.savefig(filename.replace("-0","-").replace("_0","_").replace("/","/hi-rez"))
+        else: plt.savefig(filename.replace("-0","-").replace("_0","_"))
+        
+
+    print("Heatmap time: ",time.time()-st,file = sys.stderr)
 
 #Splitting the sessions into optimal and poor, returning the lists
 def find_optimum_rates(session_list,session_to_rate_bins,rates):
